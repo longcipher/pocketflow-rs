@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 // Define a more complex state machine for an order processing system
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -238,13 +238,13 @@ impl Node for CancellationNode {
 }
 
 // Helper function to create an order processing flow
-fn create_order_flow() -> pocketflow_rs::flow::SimpleFlow<OrderState> {
-    let mut flow = pocketflow_rs::flow::SimpleFlow::new(OrderState::Received);
+fn create_order_flow() -> SimpleFlow<OrderState> {
+    let mut flow = SimpleFlow::new(OrderState::Received);
 
     // Start with payment processing
     flow.add_node(
         OrderState::Received,
-        pocketflow_rs::node::helpers::passthrough("OrderReceived", OrderState::PaymentPending),
+        pocketflow_core::node::helpers::passthrough("OrderReceived", OrderState::PaymentPending),
     );
 
     // Payment processing
@@ -253,7 +253,7 @@ fn create_order_flow() -> pocketflow_rs::flow::SimpleFlow<OrderState> {
     // Inventory check after successful payment
     flow.add_node(
         OrderState::PaymentConfirmed,
-        pocketflow_rs::node::helpers::passthrough("PaymentConfirmed", OrderState::InventoryCheck),
+        pocketflow_core::node::helpers::passthrough("PaymentConfirmed", OrderState::InventoryCheck),
     );
 
     // Inventory checking
@@ -262,7 +262,7 @@ fn create_order_flow() -> pocketflow_rs::flow::SimpleFlow<OrderState> {
     // Packaging after inventory confirmation
     flow.add_node(
         OrderState::InStock,
-        pocketflow_rs::node::helpers::passthrough("InStock", OrderState::Packaging),
+        pocketflow_core::node::helpers::passthrough("InStock", OrderState::Packaging),
     );
 
     // Packaging process
@@ -271,7 +271,7 @@ fn create_order_flow() -> pocketflow_rs::flow::SimpleFlow<OrderState> {
     // Final delivery step
     flow.add_node(
         OrderState::Shipped,
-        pocketflow_rs::node::helpers::passthrough("Shipped", OrderState::Delivered),
+        pocketflow_core::node::helpers::passthrough("Shipped", OrderState::Delivered),
     );
 
     // Handle failures

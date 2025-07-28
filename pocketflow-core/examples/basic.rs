@@ -1,6 +1,6 @@
 //! Basic usage example of PocketFlow-RS.
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 // Define your workflow state
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
     println!("🚀 Starting PocketFlow-RS Basic Example");
 
     // Create a simple flow using the builder
-    let flow = pocketflow_rs::flow::SimpleFlow::builder()
+    let flow = SimpleFlow::builder()
         .name("BasicWorkflow")
         .initial_state(WorkflowState::Start)
         // Add nodes for each state

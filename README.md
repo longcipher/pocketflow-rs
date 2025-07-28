@@ -1,42 +1,46 @@
 # PocketFlow-RS
 
-A lightweight, type-safe flow-based programming framework for Rust, built on [dptree](https://docs.rs/dptree). PocketFlow-RS provides a minimalist approach to building workflows and state machines with Rust's type system ensuring correctness at compile time.
+A modern workflow framework ecosystem for Rust, providing type-safe, async workflow execution with powerful integrations.
 
-## 🌟 Features
+## 📦 Workspace Structure
 
-- **Type-Safe**: Leverage Rust's type system for compile-time correctness
-- **Built on dptree**: Utilizes dptree's powerful dependency injection and handler system
-- **Advanced Workflows**: Middleware support, conditional routing, and execution analytics
-- **Flow Registry**: Manage and execute multiple named workflows
-- **Better Error Handling**: Modern error handling with eyre for improved debugging
-- **Lightweight**: Minimal dependencies, no external service integrations in core framework
-- **Async-First**: Full async/await support with tokio
-- **Flexible Context**: Type-safe shared state management between nodes
-- **State Machines**: First-class support for complex state transitions
-- **Batch Processing**: Built-in support for parallel batch operations
-- **Composable**: Easy to extend and integrate with external services
+This is a Cargo workspace containing the following crates:
+
+### [`pocketflow-core`](./pocketflow-core/)
+
+The core workflow framework providing:
+
+- Type-safe state management with compile-time guarantees
+- Async/await support built on Tokio
+- Flexible context system with typed and JSON storage
+- Node-based architecture with dependency injection
+- Advanced flows with middleware and analytics
+
+### [`pocketflow-mcp`](./pocketflow-mcp/)
+
+Model Context Protocol (MCP) integration for workflows:
+
+- MCP client integration for calling external tools
+- MCP server implementation to expose workflow capabilities
+- Seamless context integration between MCP and workflows
+- Registry management for multiple connections
 
 ## 🚀 Quick Start
 
-Add to your `Cargo.toml`:
+### Basic Workflow with Core
 
 ```toml
 [dependencies]
-pocketflow-rs = "0.1.0"
+pocketflow-core = "0.1.0"
 ```
 
-### Basic Example
-
 ```rust
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
+use async_trait::async_trait;
 
-// Define your workflow state
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum WorkflowState {
-    Start,
-    Processing,
-    Success,
-    Error,
+    Start, Processing, Success, Error
 }
 
 impl FlowState for WorkflowState {
@@ -45,422 +49,177 @@ impl FlowState for WorkflowState {
     }
 }
 
-// Define a processing node
-#[derive(Debug)]
-struct ProcessNode;
+struct ProcessingNode;
 
 #[async_trait]
-impl Node for ProcessNode {
+impl Node for ProcessingNode {
     type State = WorkflowState;
 
     async fn execute(&self, mut context: Context) -> Result<(Context, Self::State)> {
-        // Your processing logic here
-        let input: String = context.get_json("input")?.unwrap_or_default();
-        
-        if input.is_empty() {
-            context.set("error", "No input provided")?;
-            return Ok((context, WorkflowState::Error));
-        }
-        
-        let processed = format!("Processed: {}", input);
-        context.set("result", processed)?;
-        
+        context.set("result".to_string(), "processed")?;
         Ok((context, WorkflowState::Success))
+    }
+
+    fn name(&self) -> String {
+        "ProcessingNode".to_string()
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Create a simple flow
-    let flow = pocketflow_rs::flow::SimpleFlow::builder()
-        .name("BasicWorkflow")
+    let flow = SimpleFlow::builder()
         .initial_state(WorkflowState::Start)
-        .node(WorkflowState::Start, ProcessNode)
+        .add_node(WorkflowState::Start, ProcessingNode)
         .build()?;
-    
-    // Create context with input data
-    let mut context = Context::new();
-    context.set("input", "Hello, PocketFlow!")?;
-    
-    // Execute the flow
-    let result = flow.execute(context).await?;
-    
+
+    let result = flow.execute(Context::new()).await?;
     println!("Final state: {:?}", result.final_state);
-    println!("Result: {:?}", result.context.get_json::<String>("result")?);
-    
     Ok(())
 }
 ```
 
-## 🏗️ Core Concepts
+### Workflow with MCP Integration
 
-### Node
-
-A `Node` represents a unit of work in your workflow. It takes a context, performs some operation, and returns an updated context along with the next state.
-
-```rust
-#[derive(Debug)]
-struct MyNode;
-
-#[async_trait]
-impl Node for MyNode {
-    type State = MyState;
-
-    async fn execute(&self, context: Context) -> Result<(Context, Self::State)> {
-        // Your logic here
-        Ok((context, MyState::Success))
-    }
-}
+```toml
+[dependencies]
+pocketflow-core = "0.1.0"
+pocketflow-mcp = "0.1.0"
 ```
 
-### Context
-
-A type-safe shared state container that passes data between nodes:
-
 ```rust
-let mut context = Context::new();
+use pocketflow_core::prelude::*;
+use pocketflow_mcp::prelude::*;
 
-// Type-safe storage
-context.insert(42i32)?;
-context.insert("hello".to_string())?;
-
-// JSON storage
-context.set("key", "value")?;
-context.set("data", &my_struct)?;
-
-// Retrieval
-let number: Option<&i32> = context.get();
-let value: Option<String> = context.get_json("key")?;
-```
-
-### State
-
-States control the flow of execution and must implement the `FlowState` trait:
-
-```rust
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum MyState {
-    Start,
-    Processing,
-    Success,
-    Error,
-}
-
-impl FlowState for MyState {
-    fn is_terminal(&self) -> bool {
-        matches!(self, MyState::Success | MyState::Error)
-    }
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Create MCP client
+    let client = UltraFastMcpClient::new("http://localhost:8080").await?;
     
-    fn can_transition_to(&self, target: &Self) -> bool {
-        // Define valid transitions
-        match (self, target) {
-            (MyState::Start, MyState::Processing) => true,
-            (MyState::Processing, MyState::Success | MyState::Error) => true,
-            _ => false,
-        }
-    }
+    // Build workflow with MCP integration
+    let flow = SimpleFlow::builder()
+        .initial_state(WorkflowState::Start)
+        .add_node(WorkflowState::Start, McpClientNode::new(
+            "ai_tool_caller".to_string(),
+            Arc::new(client),
+            "summarize_text".to_string(),
+            WorkflowState::Processing,
+            WorkflowState::Success,
+            WorkflowState::Error,
+        ))
+        .build()?;
+
+    let mut context = Context::new();
+    context.set("tool_args".to_string(), serde_json::json!({
+        "text": "Long document to summarize..."
+    }))?;
+
+    let result = flow.execute(context).await?;
+    println!("Summary result: {:?}", result.context.get_json::<String>("tool_result"));
+    Ok(())
 }
 ```
 
-### Flow
+## 🏗️ Architecture
 
-Orchestrates the execution of nodes:
-
-```rust
-// Simple approach
-let flow = SimpleFlow::builder()
-    .name("MyWorkflow")
-    .initial_state(MyState::Start)
-    .node(MyState::Start, my_node)
-    .build()?;
-
-// Advanced approach with middleware
-let flow = AdvancedFlow::builder()
-    .name("AdvancedWorkflow")
-    .initial_state(MyState::Start)
-    .with_middleware(logging_middleware)
-    .when_state(MyState::Start, condition, conditional_node)
-    .with_analytics()
-    .build()?;
+```text
+┌─────────────────┐    ┌──────────────────┐
+│ pocketflow-core │    │ pocketflow-mcp   │
+├─────────────────┤    ├──────────────────┤
+│ • Node trait    │    │ • MCP Client     │
+│ • Context       │    │ • MCP Server     │
+│ • FlowState     │    │ • Registry       │
+│ • SimpleFlow    │    │ • Context Ext    │
+│ • AdvancedFlow  │    │ • MCP Nodes      │
+└─────────────────┘    └──────────────────┘
+         │                        │
+         └───────┬────────────────┘
+                 │
+    ┌─────────────────────────┐
+    │    Your Application     │
+    │                         │
+    │ • Custom Nodes          │
+    │ • Workflow Logic        │
+    │ • MCP Integrations      │
+    │ • Business Rules        │
+    └─────────────────────────┘
 ```
 
-## 📚 Examples
+## 🔧 Development
 
-The repository includes several examples demonstrating different use cases:
-
-- **[basic.rs](examples/basic.rs)**: Simple workflow with validation
-- **[state_machine.rs](examples/state_machine.rs)**: Complex order processing system  
-- **[batch_flow.rs](examples/batch_flow.rs)**: Parallel batch processing
-- **[advanced_flow.rs](examples/advanced_flow.rs)**: Advanced workflow with middleware, conditional routing, and analytics
-
-Run an example:
+The workspace is configured with shared dependencies and development tools:
 
 ```bash
-cargo run --example basic
-cargo run --example state_machine
-cargo run --example batch_flow
-cargo run --example advanced_flow
+# Format all code
+just format
+
+# Run all lints
+just lint
+
+# Test all crates
+just test
+
+# Run examples from specific crates
+cargo run --example basic --package pocketflow-core
+cargo run --example mcp_demo_simple --package pocketflow-mcp
 ```
 
-## 🔧 Advanced Features
+## 📋 Features by Crate
 
-### Middleware System
+### Core Framework Features
 
-Add pre-execution hooks and logging:
+- ✅ Type-safe state machines
+- ✅ Async workflow execution  
+- ✅ Context management (typed + JSON)
+- ✅ Node composition patterns
+- ✅ Middleware system
+- ✅ Analytics and monitoring
+- ✅ Batch processing
+- ✅ Error handling with eyre
 
-```rust
-let flow = AdvancedFlow::builder()
-    .name("WorkflowWithMiddleware")
-    .with_logging()  // Built-in logging middleware
-    .with_timing()   // Built-in timing middleware
-    .middleware(|context, state| {
-        println!("Processing state: {:?}", state);
-        Ok(())
-    })
-    .build()?;
-```
+### MCP Integration Features
 
-### Conditional Routing
+- ✅ MCP client for tool calling
+- ✅ MCP server implementation
+- ✅ Workflow context extensions
+- ✅ Registry management
+- ✅ HTTP transport
+- ⏳ WebSocket transport (planned)
+- ⏳ Prompt templates (planned)
 
-Route based on context state:
+## 🎯 Use Cases
 
-```rust
-let flow = AdvancedFlow::builder()
-    .when_state(
-        OrderState::Received,
-        |ctx| ctx.get_json::<f64>("amount")?.unwrap_or(0.0) > 100.0,
-        HighValueOrderNode,
-    )
-    .when_state(
-        OrderState::Received,
-        |ctx| ctx.get_json::<f64>("amount")?.unwrap_or(0.0) <= 100.0,
-        StandardOrderNode,
-    )
-    .build()?;
-```
+### Data Processing Pipelines
 
-### Flow Registry
+Use `pocketflow-core` for structured data transformations with state tracking.
 
-Manage multiple named workflows:
+### AI Agent Workflows  
 
-```rust
-let mut registry = FlowRegistry::new();
-registry.register("order_processing", order_flow);
-registry.register("payment_processing", payment_flow);
+Combine both crates to build AI agents that can call external tools via MCP while maintaining workflow state.
 
-// Execute by name
-let result = registry.execute("order_processing", context).await?;
-```
+### API Orchestration
 
-### Flow Analytics
+Chain multiple service calls with error handling and state management.
 
-Built-in execution metrics:
+### Microservice Communication
 
-```rust
-let flow = AdvancedFlow::builder()
-    .with_analytics()
-    .build()?;
+Use MCP as a protocol for service-to-service communication within workflows.
 
-let result = flow.execute(context).await?;
+## 📚 Documentation
 
-println!("Execution time: {:?}", result.analytics.execution_time);
-println!("Steps executed: {}", result.analytics.steps_executed);
-```
-
-### Helper Nodes
-
-PocketFlow-RS provides several helper nodes for common patterns:
-
-```rust
-use pocketflow_rs::node::helpers;
-
-// Passthrough node - transitions to a specific state
-let passthrough = helpers::passthrough("name", MyState::Success);
-
-// Conditional node - chooses state based on predicate
-let conditional = helpers::conditional(
-    "condition_check",
-    |ctx: &Context| ctx.get_json::<bool>("flag").unwrap_or(Some(false)).unwrap(),
-    MyState::Success,
-    MyState::Error,
-);
-
-// Functional node - from async closure
-let func_node = helpers::fn_node("processor", |mut ctx: Context| async move {
-    ctx.set("processed", true)?;
-    Ok((ctx, MyState::Success))
-});
-```
-
-### Batch Processing
-
-Built-in support for processing collections of items:
-
-```rust
-#[derive(Debug)]
-struct BatchProcessor;
-
-#[async_trait]
-impl Node for BatchProcessor {
-    type State = BatchState;
-
-    async fn execute(&self, context: Context) -> Result<(Context, Self::State)> {
-        let items: Vec<DataItem> = context.get_json("batch_data")?.unwrap_or_default();
-        
-        // Process items in parallel
-        let results = process_items_parallel(items).await?;
-        
-        context.set("results", results)?;
-        Ok((context, BatchState::Complete))
-    }
-}
-```
-
-## 🔋 Dependencies
-
-- [dptree](https://crates.io/crates/dptree) 0.5.1 - Enhanced dependency injection and handler system
-- [eyre](https://crates.io/crates/eyre) 0.6 - Better error handling and reporting
-- [tokio](https://crates.io/crates/tokio) 1.0 - Async runtime and futures
-- [serde](https://crates.io/crates/serde) 1.0 - Serialization framework
-- [async-trait](https://crates.io/crates/async-trait) 0.1 - Async trait support
-- [chrono](https://crates.io/crates/chrono) 0.4 - Date and time handling
-
-## 🎯 Design Philosophy
-
-PocketFlow-RS is designed around several key principles:
-
-1. **Type Safety**: Use Rust's type system to catch errors at compile time
-2. **Composability**: Build complex workflows from simple, reusable components
-3. **Lightweight**: Minimal dependencies and overhead
-4. **Extensibility**: Easy to integrate with external services and libraries
-5. **Clarity**: Clear separation of concerns between state, context, and business logic
-
-## 🔄 Compared to Other Solutions
-
-| Feature | PocketFlow-RS | Original PocketFlow | Other Workflow Engines |
-|---------|---------------|-------------------|----------------------|
-| Type Safety | ✅ Compile-time | ❌ Runtime | ⚠️ Varies |
-| Dependencies | 📦 Minimal | 🐍 Python ecosystem | 📚 Heavy |
-| Performance | 🚀 Fast (Rust) | 🐌 Slower (Python) | ⚠️ Varies |
-| Middleware | ✅ Built-in | ❌ Manual | ⚠️ Varies |
-| Analytics | ✅ Built-in | ❌ Manual | ⚠️ Varies |
-| Error Handling | ✅ eyre (Rich) | ⚠️ Basic | ⚠️ Varies |
-| Conditional Routing | ✅ Native | ❌ Manual | ⚠️ Varies |
-| Flow Registry | ✅ Built-in | ❌ Manual | ⚠️ Varies |
-| Learning Curve | 📈 Medium | 📉 Low | 📈 High |
-| Ecosystem | 🌱 Growing | 🌳 Established | 🌲 Mature |
-
-## 📦 Architecture Overview
-
-```
-pocketflow-rs/
-├── Core Framework
-│   ├── Context: Type-safe shared state management
-│   ├── Node: Async execution units with error handling
-│   ├── State: Flow state management with validation
-│   ├── Flow: Simple and advanced workflow orchestration
-│   └── Error: Modern error handling with eyre
-├── Advanced Features
-│   ├── Middleware: Pre-execution hooks and logging
-│   ├── Analytics: Execution metrics and performance tracking
-│   ├── Registry: Named flow management
-│   └── Conditional: State-based routing
-└── Examples
-    ├── basic.rs: Simple workflow demonstration
-    ├── state_machine.rs: Complex state transitions
-    ├── batch_flow.rs: Parallel processing
-    └── advanced_flow.rs: Complete order processing system
-```
-
-## 🛠️ Development
-
-### Building
-
-```bash
-cargo build
-```
-
-### Testing
-
-```bash
-cargo test
-```
-
-### Running Examples
-
-```bash
-cargo run --example basic
-cargo run --example state_machine
-cargo run --example batch_flow
-cargo run --example advanced_flow
-```
-
-## 📋 Version History
-
-### [0.1.0] - Latest
-
-#### Core Features
-- Initial release of PocketFlow-RS
-- Core workflow engine built on dptree 0.5.1
-- Type-safe context management
-- State machine support with validation
-- Simple and advanced flow execution
-- Enhanced error handling with eyre 0.6
-
-#### Advanced Features
-- Advanced flow system with middleware support
-- Conditional routing based on context state
-- Flow analytics and execution metrics
-- Flow registry for managing multiple named flows
-- Shared flow state management
-- Comprehensive real-world examples
-
-#### Technical Improvements
-- Migrated from anyhow to eyre for better error reporting
-- Enhanced dptree integration with complex handler patterns
-- Async-first design with tokio integration
-- Lightweight with minimal dependencies
-- Production-ready with comprehensive documentation
-
-## 🚧 Roadmap
-
-- [x] **anyhow → eyre**: Replaced anyhow with eyre for better error handling
-- [x] **Advanced dptree Integration**: Enhanced dependency injection and handler patterns with middleware support
-- [x] **Flow Analytics**: Built-in execution metrics and performance tracking
-- [x] **Conditional Routing**: State-based conditional flow execution
-- [x] **Middleware System**: Pre-execution hooks and logging capabilities
-- [ ] **Flow Builder**: Visual flow builder with drag-and-drop interface
-- [ ] **Persistence**: Built-in support for workflow persistence and recovery
-- [ ] **Monitoring**: Advanced metrics and tracing integration
-- [ ] **Visual Tools**: Workflow visualization and debugging tools
-- [ ] **More Examples**: Additional real-world examples and patterns
+- [Core Framework Documentation](./pocketflow-core/README.md)
+- [MCP Integration Documentation](./pocketflow-mcp/README.md)
+- [API Documentation](https://docs.rs/pocketflow-core)
+- [Examples Directory](./pocketflow-core/examples/)
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+Contributions are welcome! Please:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Check existing issues and PRs
+2. Follow the coding conventions
+3. Add tests for new features
+4. Update documentation as needed
 
-## 📝 License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Inspired by the original [PocketFlow](https://github.com/The-Pocket/PocketFlow) Python framework
-- Built on the excellent [dptree](https://docs.rs/dptree) library
-- Thanks to the Rust community for the amazing ecosystem
-
-## 📞 Support
-
-- 📖 [Documentation](https://docs.rs/pocketflow-rs)
-- 🐛 [Issue Tracker](https://github.com/teloxide/pocketflow-rs/issues)
-- 💬 [Discussions](https://github.com/teloxide/pocketflow-rs/discussions)
-
----
-
-Made with ❤️ in Rust

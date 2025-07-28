@@ -1,0 +1,45 @@
+[package]
+name = "pocketflow-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "MCP (Model Context Protocol) integration for PocketFlow"
+repository.workspace = true
+license.workspace = true
+keywords = ["mcp", "workflow", "integration", "async"]
+categories = ["algorithms", "concurrency", "data-structures"]
+readme = "../README.md"
+
+[dependencies]
+# Core PocketFlow dependency
+pocketflow-core = { workspace = true }
+
+# MCP specific
+ultrafast-mcp = { workspace = true }
+
+# Common dependencies
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+
+[features]
+default = []
+
+[[example]]
+name = "mcp_demo_simple"
+path = "examples/mcp_demo_simple.rs"
+
+[[example]]
+name = "mcp_integration"
+path = "examples/mcp_integration.rs"
+
+[[example]]
+name = "simple_mcp_demo"
+path = "examples/simple_mcp_demo.rs"

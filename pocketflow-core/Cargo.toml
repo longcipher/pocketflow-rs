@@ -1,0 +1,64 @@
+[package]
+name = "pocketflow-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Core flow-based programming framework built on dptree"
+repository.workspace = true
+license.workspace = true
+keywords = ["workflow", "flow", "state-machine", "async", "dptree"]
+categories = ["algorithms", "concurrency", "data-structures"]
+readme = "../README.md"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+dptree = { workspace = true }
+eyre = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+# Optional features
+metrics = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+fastrand = { workspace = true }
+tokio-test = { workspace = true }
+
+[features]
+default = ["tracing"]
+# Optional features for advanced use cases
+metrics = ["dep:metrics"]
+tracing = ["dep:tracing"]
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[[example]]
+name = "state_machine"
+path = "examples/state_machine.rs"
+
+[[example]]
+name = "batch_flow"
+path = "examples/batch_flow.rs"
+
+[[example]]
+name = "advanced_flow"
+path = "examples/advanced_flow.rs"
+
+[[example]]
+name = "minimal_test"
+path = "examples/minimal_test.rs"
+
+[[example]]
+name = "quick_test"
+path = "examples/quick_test.rs"
+
+[[example]]
+name = "simple_test"
+path = "examples/simple_test.rs"

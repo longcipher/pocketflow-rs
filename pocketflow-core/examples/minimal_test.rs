@@ -1,6 +1,6 @@
 //! Minimal test for PocketFlow-RS.
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum TestState {

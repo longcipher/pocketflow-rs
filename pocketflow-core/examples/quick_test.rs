@@ -1,6 +1,6 @@
 //! Quick test to verify our framework works.
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum TestState {
@@ -31,7 +31,7 @@ impl Node for SimpleNode {
 async fn main() -> Result<()> {
     println!("🧪 Testing PocketFlow-RS");
 
-    let flow = pocketflow_rs::flow::SimpleFlow::builder()
+    let flow = pocketflow_core::flow::SimpleFlow::builder()
         .name("TestFlow")
         .initial_state(TestState::Start)
         .node(TestState::Start, SimpleNode)

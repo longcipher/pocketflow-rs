@@ -1,6 +1,6 @@
 //! Simple test for PocketFlow-RS functionality.
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 // Simple workflow state
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

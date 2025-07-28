@@ -1,55 +1,55 @@
-[package]
-name = "pocketflow-rs"
+[workspace]
+members = [
+    "pocketflow-core",
+    "pocketflow-mcp",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 authors = ["akagi201 <akagi201@gmail.com>"]
-description = "A lightweight, type-safe flow-based programming framework built on dptree"
-repository = "https://github.com/teloxide/pocketflow-rs"
+repository = "https://github.com/longcipher/pocketflow-rs"
 license = "MIT"
-keywords = ["workflow", "flow", "state-machine", "async", "dptree"]
-categories = ["algorithms", "concurrency", "data-structures"]
 readme = "README.md"
 
-[package.metadata.cargo-machete]
+[workspace.metadata.cargo-machete]
 ignored = ["futures", "metrics", "tracing"]
 
-[dependencies]
+[workspace.dependencies]
+# Core async and concurrency
 async-trait = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
-dptree = "0.5.1"
-eyre = "0.6"
 futures = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "2.0"
+once_cell = "1.19"
 tokio = { version = "1.47.0", features = ["full"] }
 
-[dev-dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time and date
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+eyre = "0.6"
+thiserror = "2.0"
+
+# Core framework
+dptree = "0.5.1"
+
+# MCP integration
+ultrafast-mcp = { version = "202506018.1.0", features = [
+    "http-with-auth",
+] }
+
+# Optional features
+metrics = "0.24"
+tracing = "0.1"
+
+# Dev dependencies
 fastrand = "2.0"
 tokio-test = "0.4"
 
-[features]
-default = []
-# Optional features for advanced use cases
-metrics = ["dep:metrics"]
-tracing = ["dep:tracing"]
-
-[dependencies.tracing]
-optional = true
-version = "0.1"
-
-[dependencies.metrics]
-optional = true
-version = "0.24"
-
-[[example]]
-name = "basic"
-path = "examples/basic.rs"
-
-[[example]]
-name = "state_machine"
-path = "examples/state_machine.rs"
-
-[[example]]
-name = "batch_flow"
-path = "examples/batch_flow.rs"
+# Workspace internal dependencies
+pocketflow-core = { path = "pocketflow-core" }
+pocketflow-mcp = { path = "pocketflow-mcp" }

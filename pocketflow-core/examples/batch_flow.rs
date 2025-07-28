@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 // Batch processing states
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -318,13 +318,13 @@ impl Node for DataSaverNode {
 fn create_batch_flow(
     batch_size: usize,
     chunk_size: usize,
-) -> pocketflow_rs::flow::SimpleFlow<BatchState> {
-    let mut flow = pocketflow_rs::flow::SimpleFlow::new(BatchState::Start);
+) -> pocketflow_core::flow::SimpleFlow<BatchState> {
+    let mut flow = pocketflow_core::flow::SimpleFlow::new(BatchState::Start);
 
     // Data loading
     flow.add_node(
         BatchState::Start,
-        pocketflow_rs::node::helpers::passthrough("BatchStart", BatchState::LoadingData),
+        pocketflow_core::node::helpers::passthrough("BatchStart", BatchState::LoadingData),
     );
 
     flow.add_node(BatchState::LoadingData, DataLoaderNode::new(batch_size));

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use pocketflow_rs::prelude::*;
+use pocketflow_core::prelude::*;
 
 // Define a complex workflow state for order processing
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
