@@ -2,10 +2,11 @@
 
 ## Multi-Crate Architecture
 
-PocketFlow-RS is a Cargo workspace with two main crates:
+PocketFlow-RS is a Cargo workspace with three main crates:
 
 - **pocketflow-core**: Type-safe workflow framework built on dptree with async/await support
 - **pocketflow-mcp**: Model Context Protocol integration for calling external tools and exposing workflows as MCP servers
+- **pocketflow-cognitive**: Cognitive extensions adding thinking, planning, and reasoning capabilities via MCP
 
 ### Core Components
 
@@ -71,6 +72,38 @@ let server_node = McpServerNode::new("mcp_server".to_string(), handler, MyState:
 - `context.add_mcp_client()` for registering clients
 - `context.call_mcp_tool()` for direct tool calls
 
+## Cognitive Extensions Patterns
+
+### Thinking Node Implementation
+```rust
+let thinking_node = ChainOfThoughtNode::builder()
+    .name("reasoner")
+    .with_mcp_client(mcp_client)
+    .with_reasoning_strategy(ReasoningStrategy::StepByStep)
+    .on_success(MyState::Success)
+    .on_error(MyState::Error)
+    .build()?;
+```
+
+### Planning Node with Goal Setting
+```rust
+let planner = GoalOrientedPlanningNode::builder()
+    .with_planning_strategy(PlanningStrategy::Hierarchical)
+    .with_goal(Goal {
+        id: "optimize_system".to_string(),
+        description: "Optimize system performance".to_string(),
+        success_criteria: vec!["Reduce latency by 50%".to_string()],
+        constraints: vec!["Budget under $10k".to_string()],
+        priority: 8,
+    })
+    .build()?;
+```
+
+### Cognitive Wrapper Pattern
+- Use `CognitiveNodeExt` trait to wrap existing nodes: `my_node.with_cognitive(cognitive_impl)`
+- Cognitive traits extend Node without modification: `CognitiveNode`, `ThinkingNode`, `PlanningNode`
+- Memory management via `CognitiveContextExt`: `context.set_cognitive_memory()`, `context.add_thought()`
+
 ## Build & Test Commands
 
 Use `just` for development tasks:
@@ -101,6 +134,15 @@ For examples: `cargo run --example [basic|state_machine|batch_flow|advanced_flow
 - `src/error.rs` - MCP-specific error types with conversion to FlowError
 - `examples/` - MCP integration patterns
 
+### pocketflow-cognitive/
+- `src/lib.rs` - Cognitive extensions exports and prelude
+- `src/traits.rs` - Extension traits: CognitiveNode, ThinkingNode, PlanningNode, LearningNode
+- `src/thinking/` - Chain-of-thought, reflection, explanation nodes
+- `src/planning/` - Goal-oriented, adaptive, hierarchical planning implementations
+- `src/memory/` - Multi-layered memory systems (working, episodic, semantic)
+- `src/context/` - Cognitive context extensions and memory management
+- `examples/` - Cognitive workflow patterns
+
 ## Dependencies & Integration
 
 Built on:
@@ -110,6 +152,7 @@ Built on:
 - **serde/serde_json** - Serialization for context data
 - **chrono** - Timestamps and metadata
 - **ultrafast-mcp** - Model Context Protocol implementation with HTTP transport
+- **uuid** - For cognitive plan and task IDs
 
 ## Testing Patterns
 
@@ -119,6 +162,7 @@ Built on:
 - Test state transitions and terminal state detection
 - Use helper functions from `node::helpers` module for common patterns
 - For MCP: Test tool calls, server responses, and registry operations
+- For Cognitive: Test reasoning chains, planning outputs, memory persistence
 
 ## Common Gotchas
 
@@ -129,3 +173,7 @@ Built on:
 - Terminal states stop execution - design state machines carefully
 - MCP client connections are async - use `Arc<UltraFastMcpClient>` for sharing
 - Module structure: pocketflow-mcp removed the extra `mcp/` subdirectory layer - import directly from crate root
+- Cognitive nodes require MCP clients for AI service calls - always provide working client in builders
+- Recursive async functions in hierarchical planning require `Box::pin()` - use the pattern in `hierarchical.rs`
+- Planning strategies affect node behavior - match strategy to use case (Sequential, Hierarchical, Adaptive, etc.)
+- Memory systems are bounded to prevent unlimited growth - configure limits appropriately
