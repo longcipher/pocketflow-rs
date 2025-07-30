@@ -75,6 +75,6 @@ tracing-test = "0.2"
 # Workspace internal dependencies
 pocketflow-agent = { path = "pocketflow-agent" }
 pocketflow-cognitive = { path = "pocketflow-cognitive" }
-pocketflow-core = {  path = "pocketflow-core" }
+pocketflow-core = { path = "pocketflow-core" }
 pocketflow-mcp = { path = "pocketflow-mcp" }
 pocketflow-tools = { path = "pocketflow-tools" }
