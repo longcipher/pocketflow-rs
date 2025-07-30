@@ -63,7 +63,7 @@
 
 ```toml
 [dependencies]
-pocketflow-core = "0.1.0"
+pocketflow-core = "0.2.0"
 ```
 
 ```rust
@@ -113,9 +113,9 @@ async fn main() -> Result<()> {
 
 ```toml
 [dependencies]
-pocketflow-core = "0.1.0"
-pocketflow-agent = "0.1.0"
-pocketflow-tools = "0.1.0"
+pocketflow-core = "0.2.0"
+pocketflow-agent = "0.2.0"
+pocketflow-tools = "0.2.0"
 ```
 
 ```rust
@@ -164,9 +164,9 @@ async fn main() -> Result<()> {
 
 ```toml
 [dependencies]
-pocketflow-core = "0.1.0"
-pocketflow-cognitive = "0.1.0"
-pocketflow-mcp = "0.1.0"
+pocketflow-core = "0.2.0"
+pocketflow-cognitive = "0.2.0"
+pocketflow-mcp = "0.2.0"
 ```
 
 ```rust
@@ -372,4 +372,4 @@ cargo run --example simple_mcp_demo --package pocketflow-mcp
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
+本项目采用 Apache License 2.0 许可证 - 详见 [LICENSE](LICENSE) 文件。

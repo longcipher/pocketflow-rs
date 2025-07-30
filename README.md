@@ -63,7 +63,7 @@ Comprehensive tool system for workflow automation:
 
 ```toml
 [dependencies]
-pocketflow-core = "0.1.0"
+pocketflow-core = "0.2.0"
 ```
 
 ```rust
@@ -113,9 +113,9 @@ async fn main() -> Result<()> {
 
 ```toml
 [dependencies]
-pocketflow-core = "0.1.0"
-pocketflow-agent = "0.1.0"
-pocketflow-tools = "0.1.0"
+pocketflow-core = "0.2.0"
+pocketflow-agent = "0.2.0"
+pocketflow-tools = "0.2.0"
 ```
 
 ```rust
@@ -164,9 +164,9 @@ async fn main() -> Result<()> {
 
 ```toml
 [dependencies]
-pocketflow-core = "0.1.0"
-pocketflow-cognitive = "0.1.0"
-pocketflow-mcp = "0.1.0"
+pocketflow-core = "0.2.0"
+pocketflow-cognitive = "0.2.0"
+pocketflow-mcp = "0.2.0"
 ```
 
 ```rust
