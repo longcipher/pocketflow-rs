@@ -398,6 +398,8 @@ impl AgentNodeBuilder {
 
 #[cfg(test)]
 mod tests {
+    use pocketflow_core::node::Node;
+
     use super::*;
 
     #[tokio::test]
@@ -410,9 +412,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(agent.name(), "test");
-        assert_eq!(agent.config().max_steps, 5);
-        assert_eq!(agent.config().model_config.parameters.temperature, 0.8);
+        assert_eq!(agent.name(), "AgentNode(test)");
+        assert_eq!(agent.config.max_steps, 5);
+        assert_eq!(agent.config.model_config.parameters.temperature, 0.8);
     }
 
     #[tokio::test]
@@ -422,8 +424,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(agent.config().has_capability(&AgentCapability::ToolCalling));
-        assert_eq!(agent.config().max_steps, 15);
+        assert!(agent.config.has_capability(&AgentCapability::ToolCalling));
+        assert_eq!(agent.config.max_steps, 15);
     }
 
     #[test]

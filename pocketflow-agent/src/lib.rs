@@ -23,17 +23,26 @@
 //! use pocketflow_tools::prelude::*;
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<()> {
+//! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 //!     // Create agent configuration
 //!     let agent_config = AgentConfig {
+//!         id: uuid::Uuid::new_v4(),
 //!         name: "task_processor".to_string(),
+//!         description: "AI task processor".to_string(),
+//!         role: AgentRole::Independent,
+//!         capabilities: vec![AgentCapability::Basic],
+//!         execution_mode: ExecutionMode::Sync,
+//!         priority: Priority::Normal,
+//!         max_steps: 10,
+//!         timeout: None,
 //!         model_config: ModelConfig {
 //!             provider: ModelProvider::OpenAI,
 //!             model_name: "gpt-4o-mini".to_string(),
 //!             ..Default::default()
 //!         },
 //!         system_prompt: "You are a helpful assistant".to_string(),
-//!         ..Default::default()
+//!         available_tools: vec![],
+//!         metadata: std::collections::HashMap::new(),
 //!     };
 //!
 //!     // Create tool registry with capabilities

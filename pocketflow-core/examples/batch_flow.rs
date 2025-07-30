@@ -31,7 +31,7 @@ struct DataItem {
 }
 
 // Batch statistics
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 struct BatchStats {
     total_items: usize,
     processed_items: usize,
@@ -318,34 +318,32 @@ impl Node for DataSaverNode {
 fn create_batch_flow(
     batch_size: usize,
     chunk_size: usize,
-) -> pocketflow_core::flow::SimpleFlow<BatchState> {
-    let mut flow = pocketflow_core::flow::SimpleFlow::new(BatchState::Start);
+) -> Result<pocketflow_core::flow::SimpleFlow<BatchState>> {
+    let flow = pocketflow_core::flow::SimpleFlow::builder()
+        .name("batch_processing_flow")
+        .initial_state(BatchState::Start)
+        // Data loading
+        .node(
+            BatchState::Start,
+            pocketflow_core::node::helpers::passthrough("BatchStart", BatchState::LoadingData),
+        )
+        .node(BatchState::LoadingData, DataLoaderNode::new(batch_size))
+        // Batch processing
+        .node(BatchState::Processing, BatchProcessorNode::new(chunk_size))
+        // Validation
+        .node(BatchState::Validation, ValidationNode::new(0.8))
+        // Saving results
+        .node(BatchState::Saving, DataSaverNode)
+        .build()?;
 
-    // Data loading
-    flow.add_node(
-        BatchState::Start,
-        pocketflow_core::node::helpers::passthrough("BatchStart", BatchState::LoadingData),
-    );
-
-    flow.add_node(BatchState::LoadingData, DataLoaderNode::new(batch_size));
-
-    // Batch processing
-    flow.add_node(BatchState::Processing, BatchProcessorNode::new(chunk_size));
-
-    // Validation
-    flow.add_node(BatchState::Validation, ValidationNode::new(0.8)); // 80% minimum success rate
-
-    // Saving results
-    flow.add_node(BatchState::Saving, DataSaverNode);
-
-    flow
+    Ok(flow)
 }
 
 async fn run_batch_job(name: &str, batch_size: usize, chunk_size: usize) -> Result<()> {
     println!("\n🚀 Starting Batch Job: {}", name);
     println!("📋 Batch Size: {}, Chunk Size: {}", batch_size, chunk_size);
 
-    let flow = create_batch_flow(batch_size, chunk_size);
+    let flow = create_batch_flow(batch_size, chunk_size)?;
 
     // Create initial context
     let mut context = Context::new();
@@ -357,9 +355,10 @@ async fn run_batch_job(name: &str, batch_size: usize, chunk_size: usize) -> Resu
 
     // Display results
     println!("\n📊 Batch Job Results for '{}':", name);
-    println!("Final State: {:?}", result.state);
+    println!("Final State: {:?}", result.final_state);
     println!("Total Duration: {:?}", result.duration);
-    println!("Execution Path: {:?}", result.path);
+    println!("Steps: {}", result.steps);
+    println!("Success: {}", result.success);
 
     // Show detailed statistics
     if let Some(stats) = result.context.get_json::<BatchStats>("batch_stats")? {
@@ -375,7 +374,7 @@ async fn run_batch_job(name: &str, batch_size: usize, chunk_size: usize) -> Resu
     }
 
     // Show output information if successful
-    if result.state == BatchState::Complete {
+    if result.final_state == BatchState::Complete {
         if let Some(output_id) = result.context.get_json::<String>("output_id")? {
             println!("💾 Output ID: {}", output_id);
         }
@@ -385,7 +384,7 @@ async fn run_batch_job(name: &str, batch_size: usize, chunk_size: usize) -> Resu
     }
 
     // Show error if failed
-    if result.state == BatchState::Error {
+    if result.final_state == BatchState::Error {
         if let Some(error) = result.context.get_json::<String>("error")? {
             println!("❌ Error: {}", error);
         }

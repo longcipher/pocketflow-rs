@@ -207,9 +207,9 @@ async fn main() -> Result<()> {
         .name("order_processing_flow")
         .initial_state(OrderState::Received)
         // Add middleware for logging
-        .middleware(|execution| {
-            println!("📊 Step {}: {:?}", execution.steps, execution.current_state);
-            execution
+        .middleware(|_context, current_state| {
+            println!("📊 Current state: {:?}", current_state);
+            Ok(())
         })
         // Define state transitions and handlers
         .on_state(
@@ -228,15 +228,6 @@ async fn main() -> Result<()> {
         .on_state(OrderState::CheckingInventory, InventoryChecker)
         .on_state(OrderState::Packaging, PackagingProcessor)
         .on_state(OrderState::Shipped, ShippingProcessor)
-        // Add conditional handling for high-value orders
-        .when(|execution| async move {
-            if let Ok(Some(total)) = execution.context.get_json::<f64>("order_total") {
-                total > 1000.0
-            } else {
-                false
-            }
-        })
-        .then(StateTransitionNode(OrderState::Delivered)) // Skip some steps for high-value orders
         .build()?;
 
     // Test multiple order scenarios
@@ -284,7 +275,7 @@ async fn main() -> Result<()> {
 
         // Set order data from JSON
         for (key, value) in order_data.as_object().unwrap() {
-            context.set_json(key, value)?;
+            context.set(key, value)?;
         }
 
         let start_time = std::time::Instant::now();
@@ -314,7 +305,7 @@ async fn main() -> Result<()> {
 
     println!("\n{}", "=".repeat(60));
     println!("🎉 Advanced Flow Example Completed");
-    println!("=".repeat(60));
+    println!("{}", "=".repeat(60));
 
     // Demonstrate flow registry capabilities
     println!("\n📋 Available Flows:");

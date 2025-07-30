@@ -13,7 +13,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use pocketflow_rs::prelude::*;
+//! use pocketflow_core::prelude::*;
 //!
 //! // Define your workflow state
 //! #[derive(Clone, Debug, PartialEq, Eq, Hash)]

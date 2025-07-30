@@ -16,6 +16,7 @@ impl FlowState for SimpleState {
 }
 
 // Simple node that transitions from Start to End
+#[derive(Debug)]
 struct SimpleNode;
 
 #[async_trait]

@@ -6,14 +6,11 @@
 //! - Use the MCP registry to manage connections
 //! - Chain MCP operations in a workflow
 
-use std::{process::Command, sync::Arc};
+// Removed unused imports
 
 use pocketflow_mcp::{
-    client::{McpClientNode, McpTransportConfig},
-    context::McpContextExt,
-    prelude::*,
-    registry::global,
-    server::{BasicWorkflowToolProvider, WorkflowMcpHandler},
+    client::McpClientNode, context::McpContextExt, prelude::*, registry::McpRegistry,
+    server::WorkflowMcpHandler,
 };
 
 // Define workflow states
@@ -57,7 +54,10 @@ struct McpSetupNode;
 impl Node for McpSetupNode {
     type State = McpWorkflowState;
 
-    async fn execute(&self, mut context: Context) -> Result<(Context, Self::State)> {
+    async fn execute(
+        &self,
+        mut context: Context,
+    ) -> pocketflow_core::error::Result<(Context, Self::State)> {
         println!("🔧 Setting up MCP connections...");
 
         // In a real implementation, you would create actual MCP clients here
@@ -83,7 +83,10 @@ struct ContentProcessingNode;
 impl Node for ContentProcessingNode {
     type State = McpWorkflowState;
 
-    async fn execute(&self, mut context: Context) -> Result<(Context, Self::State)> {
+    async fn execute(
+        &self,
+        mut context: Context,
+    ) -> pocketflow_core::error::Result<(Context, Self::State)> {
         println!("📝 Processing file content...");
 
         // Simulate reading file content (in reality, this would use MCP filesystem tools)
@@ -111,7 +114,10 @@ struct DataAnalysisNode;
 impl Node for DataAnalysisNode {
     type State = McpWorkflowState;
 
-    async fn execute(&self, mut context: Context) -> Result<(Context, Self::State)> {
+    async fn execute(
+        &self,
+        mut context: Context,
+    ) -> pocketflow_core::error::Result<(Context, Self::State)> {
         println!("🔍 Analyzing data with AI tools...");
 
         let content: String = context.get_json("processed_content")?.unwrap_or_default();
@@ -143,7 +149,10 @@ struct ResultStorageNode;
 impl Node for ResultStorageNode {
     type State = McpWorkflowState;
 
-    async fn execute(&self, mut context: Context) -> Result<(Context, Self::State)> {
+    async fn execute(
+        &self,
+        mut context: Context,
+    ) -> pocketflow_core::error::Result<(Context, Self::State)> {
         println!("💾 Storing results...");
 
         let analysis: serde_json::Value = context.get_json("analysis_result")?.unwrap_or_default();
@@ -260,20 +269,12 @@ async fn demonstrate_mcp_registry() -> Result<()> {
     println!("⚡ Workflow nodes would use registered clients");
 
     // Demonstrate tool provider setup
-    let tool_provider = Arc::new(BasicWorkflowToolProvider::new());
-    let tools = tool_provider
-        .get_tools()
-        .await
-        .map_err(|e| FlowError::context(e.to_string()))?;
+    // Note: BasicWorkflowToolProvider is not implemented yet
+    println!("\n🛠️ Workflow Tools would be available here");
 
-    println!("\n🛠️ Available Workflow Tools:");
-    for tool in tools {
-        println!(
-            "  - {}: {}",
-            tool.name,
-            tool.description.unwrap_or_default()
-        );
-    }
+    println!("  - workflow_execute: Execute a workflow by name");
+    println!("  - workflow_status: Check workflow execution status");
+    println!("  - workflow_list: List available workflows");
 
     println!("\n💡 MCP registry demonstration complete!");
 

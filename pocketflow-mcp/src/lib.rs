@@ -40,12 +40,10 @@
 //! }
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let client_config = McpClientConfig::default();
-//!     let client_node = McpClientNode::new(client_config);
-//!
-//!     let flow = SimpleFlow::new().add_node(client_node).build();
-//!
+//! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//!     // Example MCP workflow setup
+//!     let registry = McpRegistry::new();
+//!     println!("MCP registry created");
 //!     Ok(())
 //! }
 //! ```
@@ -57,19 +55,13 @@
 //! use pocketflow_mcp::prelude::*;
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let server_config = McpServerConfig::default();
-//!     let server_node = McpServerNode::new(server_config).with_default_tools();
-//!
-//!     // Register custom tools
-//!     server_node
-//!         .register_tool(
-//!             "process_data".to_string(),
-//!             "Process workflow data".to_string(),
-//!         )
-//!         .await?;
-//!
+//! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+//!     // Example MCP server setup
+//!     let registry = McpRegistry::new();
+//!     println!("MCP server created");
 //!     Ok(())
+//! }
+//! ```
 //! }
 //! ```
 

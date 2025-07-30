@@ -59,6 +59,25 @@ impl FlowState for MultiAgentState {
     }
 }
 
+impl MultiAgentState {
+    /// Check if this state can transition to another state
+    #[cfg(test)]
+    fn can_transition_to(&self, target: &MultiAgentState) -> bool {
+        use MultiAgentState::*;
+
+        match (self, target) {
+            (Ready, Planning) => true,
+            (Planning, Executing { .. }) => true,
+            (Executing { .. }, Waiting { .. }) => true,
+            (Executing { .. }, Coordinating) => true,
+            (Waiting { .. }, Coordinating) => true,
+            (Coordinating, Completed { .. }) => true,
+            (_, Failed { .. }) => true, // Can always transition to failed state
+            _ => false,                 // All other transitions are invalid
+        }
+    }
+}
+
 /// Multi-agent node for coordinating multiple AI agents
 #[derive(Debug)]
 pub struct MultiAgentNode {

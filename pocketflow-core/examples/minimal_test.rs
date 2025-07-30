@@ -14,6 +14,7 @@ impl FlowState for TestState {
     }
 }
 
+#[derive(Debug)]
 struct TestNode;
 
 #[async_trait]

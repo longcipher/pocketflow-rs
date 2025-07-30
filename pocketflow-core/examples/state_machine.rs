@@ -162,7 +162,7 @@ impl Node for InventoryChecker {
             Ok((context, OrderState::InStock))
         } else {
             context.set("inventory_status", "unavailable")?;
-            context.set("out_of_stock_items", out_of_stock_items)?;
+            context.set("out_of_stock_items", &out_of_stock_items)?;
             println!("❌ Some items out of stock: {:?}", out_of_stock_items);
             Ok((context, OrderState::OutOfStock))
         }
@@ -238,48 +238,48 @@ impl Node for CancellationNode {
 }
 
 // Helper function to create an order processing flow
-fn create_order_flow() -> SimpleFlow<OrderState> {
-    let mut flow = SimpleFlow::new(OrderState::Received);
+fn create_order_flow() -> Result<SimpleFlow<OrderState>> {
+    let flow = SimpleFlow::builder()
+        .name("order_processing_flow")
+        .initial_state(OrderState::Received)
+        // Start with payment processing
+        .node(
+            OrderState::Received,
+            pocketflow_core::node::helpers::passthrough(
+                "OrderReceived",
+                OrderState::PaymentPending,
+            ),
+        )
+        // Payment processing
+        .node(OrderState::PaymentPending, PaymentProcessor)
+        // Inventory check after successful payment
+        .node(
+            OrderState::PaymentConfirmed,
+            pocketflow_core::node::helpers::passthrough(
+                "PaymentConfirmed",
+                OrderState::InventoryCheck,
+            ),
+        )
+        // Inventory checking
+        .node(OrderState::InventoryCheck, InventoryChecker)
+        // Packaging after inventory confirmation
+        .node(
+            OrderState::InStock,
+            pocketflow_core::node::helpers::passthrough("InStock", OrderState::Packaging),
+        )
+        // Packaging process
+        .node(OrderState::Packaging, PackagingNode)
+        // Final delivery step
+        .node(
+            OrderState::Shipped,
+            pocketflow_core::node::helpers::passthrough("Shipped", OrderState::Delivered),
+        )
+        // Handle failures
+        .node(OrderState::PaymentFailed, CancellationNode)
+        .node(OrderState::OutOfStock, CancellationNode)
+        .build()?;
 
-    // Start with payment processing
-    flow.add_node(
-        OrderState::Received,
-        pocketflow_core::node::helpers::passthrough("OrderReceived", OrderState::PaymentPending),
-    );
-
-    // Payment processing
-    flow.add_node(OrderState::PaymentPending, PaymentProcessor);
-
-    // Inventory check after successful payment
-    flow.add_node(
-        OrderState::PaymentConfirmed,
-        pocketflow_core::node::helpers::passthrough("PaymentConfirmed", OrderState::InventoryCheck),
-    );
-
-    // Inventory checking
-    flow.add_node(OrderState::InventoryCheck, InventoryChecker);
-
-    // Packaging after inventory confirmation
-    flow.add_node(
-        OrderState::InStock,
-        pocketflow_core::node::helpers::passthrough("InStock", OrderState::Packaging),
-    );
-
-    // Packaging process
-    flow.add_node(OrderState::Packaging, PackagingNode);
-
-    // Final delivery step
-    flow.add_node(
-        OrderState::Shipped,
-        pocketflow_core::node::helpers::passthrough("Shipped", OrderState::Delivered),
-    );
-
-    // Handle failures
-    flow.add_node(OrderState::PaymentFailed, CancellationNode);
-
-    flow.add_node(OrderState::OutOfStock, CancellationNode);
-
-    flow
+    Ok(flow)
 }
 
 async fn process_order(order: Order, should_cancel: bool) -> Result<()> {
@@ -287,7 +287,7 @@ async fn process_order(order: Order, should_cancel: bool) -> Result<()> {
     println!("Items: {:?}", order.items);
     println!("Amount: ${:.2}", order.amount);
 
-    let flow = create_order_flow();
+    let flow = create_order_flow()?;
 
     // Create context with order data
     let mut context = Context::new();
@@ -304,12 +304,13 @@ async fn process_order(order: Order, should_cancel: bool) -> Result<()> {
 
     // Display results
     println!("\n📊 Order Processing Results:");
-    println!("Final State: {:?}", result.state);
+    println!("Final State: {:?}", result.final_state);
     println!("Duration: {:?}", result.duration);
-    println!("Path: {:?}", result.path);
+    println!("Steps: {}", result.steps);
+    println!("Success: {}", result.success);
 
     // Show relevant context data based on final state
-    match result.state {
+    match result.final_state {
         OrderState::Delivered => {
             if let Some(tracking) = result.context.get_json::<String>("tracking_number")? {
                 println!("📦 Tracking Number: {}", tracking);

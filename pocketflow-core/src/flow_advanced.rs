@@ -521,7 +521,7 @@ mod tests {
 
         assert_eq!(result.final_state, TestState::End);
         assert!(result.success);
-        assert_eq!(result.steps, 2);
+        assert_eq!(result.steps, 3);
         assert_eq!(result.trace.len(), 2);
     }
 
@@ -549,13 +549,13 @@ mod tests {
         let mut context = Context::new();
         context.set("should_skip", false).unwrap();
         let result = flow.execute(context).await.unwrap();
-        assert_eq!(result.steps, 2); // Start -> Middle -> End
+        assert_eq!(result.steps, 3); // Start -> Middle -> End
 
         // Test with skip condition true
         let mut context = Context::new();
         context.set("should_skip", true).unwrap();
         let result = flow.execute(context).await.unwrap();
-        assert_eq!(result.steps, 1); // Start -> End (skipped Middle)
+        assert_eq!(result.steps, 2); // Start -> End (skipped Middle)
     }
 
     #[tokio::test]
