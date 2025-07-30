@@ -121,7 +121,7 @@ publish_crate() {
     fi
     
     # Publish the crate
-    local publish_cmd="cargo publish --package $crate"
+    local publish_cmd="cargo publish --package $crate --allow-dirty"
     if [[ "$dry_run" == "true" ]]; then
         publish_cmd="$publish_cmd --dry-run"
         print_info "Dry run: $publish_cmd"

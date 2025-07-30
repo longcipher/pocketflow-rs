@@ -73,8 +73,8 @@ tracing-subscriber = "0.3"
 tracing-test = "0.2"
 
 # Workspace internal dependencies
-pocketflow-agent = { path = "pocketflow-agent" }
-pocketflow-cognitive = { path = "pocketflow-cognitive" }
-pocketflow-core = { path = "pocketflow-core" }
-pocketflow-mcp = { path = "pocketflow-mcp" }
-pocketflow-tools = { path = "pocketflow-tools" }
+pocketflow-agent = { path = "pocketflow-agent", version = "0.2.0" }
+pocketflow-cognitive = { path = "pocketflow-cognitive", version = "0.2.0" }
+pocketflow-core = { path = "pocketflow-core", version = "0.2.0" }
+pocketflow-mcp = { path = "pocketflow-mcp", version = "0.2.0" }
+pocketflow-tools = { path = "pocketflow-tools", version = "0.2.0" }
