@@ -2,11 +2,13 @@
 
 ## Multi-Crate Architecture
 
-PocketFlow-RS is a Cargo workspace with three main crates:
+PocketFlow-RS is a Cargo workspace with five main crates:
 
 - **pocketflow-core**: Type-safe workflow framework built on dptree with async/await support
 - **pocketflow-mcp**: Model Context Protocol integration for calling external tools and exposing workflows as MCP servers
 - **pocketflow-cognitive**: Cognitive extensions adding thinking, planning, and reasoning capabilities via MCP
+- **pocketflow-agent**: AI Agent framework with genai integration for building intelligent workflow nodes
+- **pocketflow-tools**: Tool system for workflow automation with JSON schema validation and execution
 
 ### Core Components
 
@@ -36,12 +38,16 @@ impl FlowState for MyState {
 - Return `Result<(Context, Self::State)>` from `execute()`
 - Use `context.set()` for JSON data, `context.insert()` for typed data
 - Implement `name()` method for debugging/logging
+- For agent nodes: prefer `AgentNode` from pocketflow-agent for AI-powered processing
+- For tool execution: use `ToolRegistry` from pocketflow-tools for schema validation
 
 ### Error Handling
 - Use `FlowError` types with eyre integration for rich error messages
 - Create specific error constructors: `FlowError::context()`, `FlowError::construction()`
 - Propagate errors with `?` operator throughout async chains
 - MCP errors automatically convert to `FlowError` via `From` implementations
+- Agent errors use `AgentError` type with proper error context
+- Tool errors use `ToolError` for parameter validation and execution failures
 
 ### Context Management
 - Prefer JSON storage for serializable data that flows between nodes
@@ -104,6 +110,54 @@ let planner = GoalOrientedPlanningNode::builder()
 - Cognitive traits extend Node without modification: `CognitiveNode`, `ThinkingNode`, `PlanningNode`
 - Memory management via `CognitiveContextExt`: `context.set_cognitive_memory()`, `context.add_thought()`
 
+## AI Agent Integration Patterns
+
+### Agent Node Usage
+```rust
+let agent = AgentNode::new(AgentConfig {
+    name: "task_processor".to_string(),
+    model_config: ModelConfig {
+        provider: ModelProvider::OpenAI,
+        model_name: "gpt-4o-mini".to_string(),
+        parameters: ModelParameters::default(),
+        api_config: ApiConfig::default(),
+    },
+    system_prompt: "You are a task processing agent".to_string(),
+    ..Default::default()
+})
+.with_tools(tool_registry);
+```
+
+### Multi-Step Agent Execution
+- Agents maintain execution history in `Arc<RwLock<Vec<AgentStep>>>`
+- Use `agent.step(input).await` for individual interactions
+- Access history with `agent.get_history().await`
+- Reset state with `agent.reset().await`
+
+## Tool System Patterns
+
+### Tool Registration and Validation
+```rust
+let mut registry = ToolRegistry::new();
+registry.register_tool(Box::new(MyTool::new()))?;
+
+// Tools must implement Tool trait with parameter_schema() and execute()
+impl Tool for MyTool {
+    fn parameter_schema(&self) -> serde_json::Value {
+        ToolParameters::new_schema()
+            .add_required("input", "string", "Input text to process")
+            .add_optional("options", "object", "Processing options", None)
+            .into()
+    }
+}
+```
+
+### Tool Parameter Handling
+- Use `ToolParameters::get<T>()` for required parameters
+- Use `ToolParameters::get_optional<T>()` for optional parameters
+- Tool context includes execution environment, timeouts, and retry configuration
+- Return `ToolResult` with success/error status and content type metadata
+
 ## Build & Test Commands
 
 Use `just` for development tasks:
@@ -143,6 +197,21 @@ For examples: `cargo run --example [basic|state_machine|batch_flow|advanced_flow
 - `src/context/` - Cognitive context extensions and memory management
 - `examples/` - Cognitive workflow patterns
 
+### pocketflow-agent/
+- `src/lib.rs` - Agent framework exports and prelude
+- `src/agent_node.rs` - AgentNode implementation with genai integration
+- `src/agent_types.rs` - Agent configuration, states, and result types
+- `src/error.rs` - Agent-specific error types and conversions
+- `examples/` - Agent usage patterns and multi-agent scenarios
+
+### pocketflow-tools/
+- `src/lib.rs` - Tool system exports and prelude
+- `src/core.rs` - Tool trait, parameters, context, and result types
+- `src/registry.rs` - ToolRegistry for managing and executing tools
+- `src/validation.rs` - Parameter validation and schema enforcement
+- `src/utils.rs` - Utility functions for tool development
+- `src/error.rs` - Tool-specific error types with detailed parameter validation
+
 ## Dependencies & Integration
 
 Built on:
@@ -153,6 +222,8 @@ Built on:
 - **chrono** - Timestamps and metadata
 - **ultrafast-mcp** - Model Context Protocol implementation with HTTP transport
 - **uuid** - For cognitive plan and task IDs
+- **genai** - AI/LLM integration for agent nodes
+- **jsonschema** - Tool parameter validation and schema enforcement
 
 ## Testing Patterns
 
@@ -163,6 +234,8 @@ Built on:
 - Use helper functions from `node::helpers` module for common patterns
 - For MCP: Test tool calls, server responses, and registry operations
 - For Cognitive: Test reasoning chains, planning outputs, memory persistence
+- For Agents: Test step execution, history management, and error handling
+- For Tools: Test parameter validation, execution results, and registry operations
 
 ## Common Gotchas
 
@@ -177,3 +250,7 @@ Built on:
 - Recursive async functions in hierarchical planning require `Box::pin()` - use the pattern in `hierarchical.rs`
 - Planning strategies affect node behavior - match strategy to use case (Sequential, Hierarchical, Adaptive, etc.)
 - Memory systems are bounded to prevent unlimited growth - configure limits appropriately
+- Agent nodes use `AgentState` enum for flow control - map to appropriate business states
+- Tool parameter schemas use `jsonschema` crate validation - define schemas with `ToolParameters::new_schema()`
+- Tool execution context includes retry config, timeouts, and custom metadata
+- Agent execution history is thread-safe via `Arc<RwLock<Vec<AgentStep>>>` - always use `.await` for access

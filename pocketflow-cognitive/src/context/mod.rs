@@ -5,7 +5,7 @@
 
 use pocketflow_core::context::Context;
 
-use crate::{memory::CognitiveMemory, Result};
+use crate::{Result, memory::CognitiveMemory};
 
 /// Extension trait for adding cognitive capabilities to Context
 pub trait CognitiveContextExt {

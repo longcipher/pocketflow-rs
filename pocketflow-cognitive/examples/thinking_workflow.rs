@@ -169,8 +169,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 }
 
 // Mock MCP client for demonstration purposes
-async fn create_mock_mcp_client(
-) -> std::result::Result<Arc<dyn McpClient>, Box<dyn std::error::Error>> {
+async fn create_mock_mcp_client()
+-> std::result::Result<Arc<dyn McpClient>, Box<dyn std::error::Error>> {
     // In a real implementation, this would create an actual MCP client
     // connecting to LLM services, planning services, etc.
 

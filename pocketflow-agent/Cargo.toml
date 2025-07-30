@@ -1,0 +1,48 @@
+[package]
+name = "pocketflow-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "AI Agent framework for PocketFlow with genai integration"
+keywords = ["ai", "agent", "workflow", "llm", "genai"]
+categories = ["development-tools", "automation"]
+
+[dependencies]
+# Core dependencies
+pocketflow-core = { workspace = true }
+pocketflow-tools = { workspace = true }
+
+# GenAI integration
+genai = { workspace = true }
+
+# Async and concurrency
+async-trait = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+
+# Serialization and validation
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+# Development dependencies
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tokio-test = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-test = { workspace = true }
+
+[features]
+default = ["streaming"]
+streaming = []
+full = ["streaming"]

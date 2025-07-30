@@ -1,36 +1,37 @@
 [package]
 name = "pocketflow-cognitive"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 description = "Cognitive extensions for PocketFlow - thinking, planning, and reasoning capabilities"
-authors = ["PocketFlow Contributors"]
-license = "MIT OR Apache-2.0"
 keywords = ["workflow", "cognitive", "ai", "reasoning", "planning"]
 categories = ["development-tools", "asynchronous"]
 
 [dependencies]
 # Core dependencies
-pocketflow-core = { path = "../pocketflow-core", version = "0.1.0" }
-pocketflow-mcp = { path = "../pocketflow-mcp", version = "0.1.0" }
+pocketflow-core = { workspace = true }
+pocketflow-mcp = { workspace = true }
 
 # Async runtime
-async-trait = "0.1"
-tokio = { version = "1.0", features = ["full"] }
+async-trait = { workspace = true }
+tokio = { workspace = true }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Error handling  
-thiserror = "2.0"
+thiserror = { workspace = true }
 
 # Utilities
-chrono = { version = "0.4", features = ["serde"] }
-tracing = "0.1"
-uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
-tokio-test = "0.4"
+tokio-test = { workspace = true }
 
 [features]
 default = ["reasoning", "planning", "memory"]

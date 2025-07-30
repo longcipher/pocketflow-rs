@@ -8,14 +8,14 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pocketflow_core::{context::Context, node::Node, state::FlowState};
 use pocketflow_mcp::client::McpClient;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
+    Result,
     traits::{
         CognitiveNode, Decision, ExecutionResult, Explanation, ReasoningChain, ReasoningStep,
         Reflection, ThinkingNode,
     },
-    Result,
 };
 
 pub mod chain_of_thought;
@@ -211,8 +211,8 @@ impl<S: FlowState> Node for ChainOfThoughtNode<S> {
                 context.set("reasoning_confidence", reasoning_chain.confidence)?;
 
                 // Optionally perform reflection if enabled
-                if self.config.enable_reflection {
-                    if let Ok(reflection) = self
+                if self.config.enable_reflection
+                    && let Ok(reflection) = self
                         .reflect(
                             &context,
                             &ExecutionResult {
@@ -224,9 +224,8 @@ impl<S: FlowState> Node for ChainOfThoughtNode<S> {
                             },
                         )
                         .await
-                    {
-                        context.set("reasoning_reflection", &reflection)?;
-                    }
+                {
+                    context.set("reasoning_reflection", &reflection)?;
                 }
 
                 Ok((context, self.success_state.clone()))
@@ -299,9 +298,7 @@ impl<S: FlowState> ThinkingNode for ChainOfThoughtNode<S> {
     async fn explain(&self, _context: &Context, decision: &Decision) -> Result<Explanation> {
         let explanation_prompt = format!(
             "Explain this decision:\n\nDecision Point: {}\nChosen Option: {}\nAvailable Options: {:?}",
-            decision.decision_point,
-            decision.chosen_option,
-            decision.available_options
+            decision.decision_point, decision.chosen_option, decision.available_options
         );
 
         let tool_args = json!({

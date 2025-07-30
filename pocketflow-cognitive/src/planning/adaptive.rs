@@ -5,12 +5,12 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use pocketflow_core::{context::Context, node::Node, state::FlowState};
 use pocketflow_mcp::client::McpClient;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{PlanningConfig, PlanningStrategy};
 use crate::{
-    traits::{CognitiveNode, ExecutionPlan, Goal, PlanStep, PlanningNode, ProgressEvaluation},
     Result,
+    traits::{CognitiveNode, ExecutionPlan, Goal, PlanStep, PlanningNode, ProgressEvaluation},
 };
 
 /// A node that performs adaptive planning with feedback loops and dynamic replanning.
