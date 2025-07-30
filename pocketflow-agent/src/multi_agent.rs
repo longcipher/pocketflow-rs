@@ -1,15 +1,15 @@
+use std::{collections::HashMap, sync::Arc};
+
 use async_trait::async_trait;
 use pocketflow_core::prelude::{Context, FlowError, FlowState, Node};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{info, warn, error};
-use uuid::Uuid;
+use tracing::{error, info, warn};
 
-use crate::agent_node::{AgentNode, AgentRegistry};
-use crate::agent_types::{AgentConfig, AgentResult, AgentStep, Priority};
-use crate::error::{AgentError, Result};
+use crate::{
+    agent_node::{AgentNode, AgentRegistry},
+    agent_types::{AgentResult, AgentStep},
+    error::{AgentError, Result},
+};
 
 /// Multi-agent coordination strategies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ pub enum MultiAgentState {
     /// Planning execution
     Planning,
     /// Agents are executing
-    Executing { 
+    Executing {
         active_agents: Vec<String>,
         completed_agents: Vec<String>,
     },
@@ -59,7 +59,8 @@ impl FlowState for MultiAgentState {
     }
 }
 
-/// Multi-agent orchestrator node
+/// Multi-agent node for coordinating multiple AI agents
+#[derive(Debug)]
 pub struct MultiAgentNode {
     name: String,
     coordinator: Option<Arc<AgentNode>>,
@@ -72,9 +73,9 @@ pub struct MultiAgentNode {
 
 impl MultiAgentNode {
     pub fn new(
-        name: impl Into<String>, 
+        name: impl Into<String>,
         strategy: CoordinationStrategy,
-        agent_registry: Arc<AgentRegistry>
+        agent_registry: Arc<AgentRegistry>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -115,42 +116,39 @@ impl MultiAgentNode {
     /// Execute multiple agents with the given strategy
     pub async fn execute_multi_agent(&self, task: &str) -> Result<MultiAgentResult> {
         let start_time = std::time::Instant::now();
-        info!("Starting multi-agent execution with strategy {:?} for task: {}", self.strategy, task);
+        info!(
+            "Starting multi-agent execution with strategy {:?} for task: {}",
+            self.strategy, task
+        );
 
         match self.strategy {
-            CoordinationStrategy::Sequential => {
-                self.execute_sequential(task, start_time).await
-            }
-            CoordinationStrategy::Parallel => {
-                self.execute_parallel(task, start_time).await
-            }
-            CoordinationStrategy::Hierarchical => {
-                self.execute_hierarchical(task, start_time).await
-            }
-            CoordinationStrategy::Voting => {
-                self.execute_voting(task, start_time).await
-            }
-            CoordinationStrategy::RoundRobin => {
-                self.execute_round_robin(task, start_time).await
-            }
-            CoordinationStrategy::Custom(_) => {
-                Err(AgentError::coordination("Custom strategies not yet implemented"))
-            }
+            CoordinationStrategy::Sequential => self.execute_sequential(task, start_time).await,
+            CoordinationStrategy::Parallel => self.execute_parallel(task, start_time).await,
+            CoordinationStrategy::Hierarchical => self.execute_hierarchical(task, start_time).await,
+            CoordinationStrategy::Voting => self.execute_voting(task, start_time).await,
+            CoordinationStrategy::RoundRobin => self.execute_round_robin(task, start_time).await,
+            CoordinationStrategy::Custom(_) => Err(AgentError::coordination(
+                "Custom strategies not yet implemented",
+            )),
         }
     }
 
-    async fn execute_sequential(&self, task: &str, start_time: std::time::Instant) -> Result<MultiAgentResult> {
+    async fn execute_sequential(
+        &self,
+        task: &str,
+        start_time: std::time::Instant,
+    ) -> Result<MultiAgentResult> {
         let mut results = HashMap::new();
         let mut all_steps = Vec::new();
         let mut current_input = task.to_string();
 
         // Sort agents by priority
         let mut sorted_agents: Vec<_> = self.agents.iter().collect();
-        sorted_agents.sort_by(|a, b| b.1.config().priority.cmp(&a.1.config().priority));
+        sorted_agents.sort_by(|a, b| b.1.config.priority.cmp(&a.1.config.priority));
 
         for (agent_name, agent) in sorted_agents {
             info!("Executing agent '{}' sequentially", agent_name);
-            
+
             match agent.execute_task(&current_input).await {
                 Ok(result) => {
                     if result.success {
@@ -163,27 +161,28 @@ impl MultiAgentNode {
                         let error = result.error.unwrap_or_else(|| "Agent failed".to_string());
                         error!("Agent '{}' failed: {}", agent_name, error);
                         return Ok(MultiAgentResult::failure(
-                            format!("Agent '{}' failed: {}", agent_name, error),
+                            format!("Agent '{agent_name}' failed: {error}"),
                             results,
                             all_steps,
-                            start_time.elapsed()
+                            start_time.elapsed(),
                         ));
                     }
                 }
                 Err(e) => {
                     error!("Agent '{}' error: {}", agent_name, e);
                     return Ok(MultiAgentResult::failure(
-                        format!("Agent '{}' error: {}", agent_name, e),
+                        format!("Agent '{agent_name}' error: {e}"),
                         results,
                         all_steps,
-                        start_time.elapsed()
+                        start_time.elapsed(),
                     ));
                 }
             }
         }
 
         // Use the last agent's result as final result
-        let final_result = results.values()
+        let final_result = results
+            .values()
             .last()
             .and_then(|r| r.final_answer.clone())
             .unwrap_or_else(|| "No final result".to_string());
@@ -192,23 +191,28 @@ impl MultiAgentNode {
             final_result,
             results,
             all_steps,
-            start_time.elapsed()
+            start_time.elapsed(),
         ))
     }
 
-    async fn execute_parallel(&self, task: &str, start_time: std::time::Instant) -> Result<MultiAgentResult> {
+    async fn execute_parallel(
+        &self,
+        task: &str,
+        start_time: std::time::Instant,
+    ) -> Result<MultiAgentResult> {
         info!("Executing {} agents in parallel", self.agents.len());
-        
+
         // Execute all agents concurrently
         let mut handles = Vec::new();
         for (agent_name, agent) in &self.agents {
             let agent_clone = agent.clone();
             let task_clone = task.to_string();
             let name_clone = agent_name.clone();
-            
-            let handle = tokio::spawn(async move {
-                (name_clone, agent_clone.execute_task(&task_clone).await)
-            });
+
+            let handle =
+                tokio::spawn(
+                    async move { (name_clone, agent_clone.execute_task(&task_clone).await) },
+                );
             handles.push(handle);
         }
 
@@ -234,11 +238,14 @@ impl MultiAgentNode {
                         }
                         Err(e) => {
                             warn!("Agent '{}' failed: {}", agent_name, e);
-                            results.insert(agent_name, AgentResult::failure(
-                                e.to_string(), 
-                                Vec::new(), 
-                                std::time::Duration::default()
-                            ));
+                            results.insert(
+                                agent_name,
+                                AgentResult::failure(
+                                    e.to_string(),
+                                    Vec::new(),
+                                    std::time::Duration::default(),
+                                ),
+                            );
                         }
                     }
                 }
@@ -253,25 +260,31 @@ impl MultiAgentNode {
                 final_result,
                 results,
                 all_steps,
-                start_time.elapsed()
+                start_time.elapsed(),
             ))
         } else {
             Ok(MultiAgentResult::failure(
                 "All agents failed".to_string(),
                 results,
                 all_steps,
-                start_time.elapsed()
+                start_time.elapsed(),
             ))
         }
     }
 
-    async fn execute_hierarchical(&self, task: &str, start_time: std::time::Instant) -> Result<MultiAgentResult> {
+    async fn execute_hierarchical(
+        &self,
+        task: &str,
+        start_time: std::time::Instant,
+    ) -> Result<MultiAgentResult> {
         if let Some(coordinator) = &self.coordinator {
             info!("Executing hierarchical coordination with coordinator");
-            
+
             // Register all agents with the coordinator's registry
-            for (name, agent) in &self.agents {
-                self.agent_registry.register_agent(agent.clone()).await?;
+            for agent in self.agents.values() {
+                self.agent_registry
+                    .register(agent.config.name.clone(), agent.clone())
+                    .await;
             }
 
             // Execute coordinator
@@ -279,46 +292,57 @@ impl MultiAgentNode {
                 Ok(result) => {
                     if result.success {
                         Ok(MultiAgentResult::success(
-                            result.final_answer.unwrap_or_default(),
-                            [(coordinator.config().name.clone(), result.clone())].into(),
+                            result.final_answer.clone().unwrap_or_default(),
+                            [(coordinator.config.name.clone(), result.clone())].into(),
                             result.steps,
-                            start_time.elapsed()
+                            start_time.elapsed(),
                         ))
                     } else {
                         Ok(MultiAgentResult::failure(
-                            result.error.unwrap_or_else(|| "Coordinator failed".to_string()),
-                            [(coordinator.config().name.clone(), result.clone())].into(),
+                            result
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Coordinator failed".to_string()),
+                            [(coordinator.config.name.clone(), result.clone())].into(),
                             result.steps,
-                            start_time.elapsed()
+                            start_time.elapsed(),
                         ))
                     }
                 }
-                Err(e) => {
-                    Ok(MultiAgentResult::failure(
-                        e.to_string(),
-                        HashMap::new(),
-                        Vec::new(),
-                        start_time.elapsed()
-                    ))
-                }
+                Err(e) => Ok(MultiAgentResult::failure(
+                    e.to_string(),
+                    HashMap::new(),
+                    Vec::new(),
+                    start_time.elapsed(),
+                )),
             }
         } else {
-            Err(AgentError::configuration("Hierarchical strategy requires a coordinator agent"))
+            Err(AgentError::configuration(
+                "Hierarchical strategy requires a coordinator agent",
+            ))
         }
     }
 
-    async fn execute_voting(&self, task: &str, start_time: std::time::Instant) -> Result<MultiAgentResult> {
-        info!("Executing voting strategy with {} agents", self.agents.len());
-        
+    async fn execute_voting(
+        &self,
+        task: &str,
+        start_time: std::time::Instant,
+    ) -> Result<MultiAgentResult> {
+        info!(
+            "Executing voting strategy with {} agents",
+            self.agents.len()
+        );
+
         // Execute all agents in parallel
         let parallel_result = self.execute_parallel(task, start_time).await?;
-        
+
         if !parallel_result.success {
             return Ok(parallel_result);
         }
 
         // Collect all successful results for voting
-        let successful_results: Vec<_> = parallel_result.agent_results
+        let successful_results: Vec<_> = parallel_result
+            .agent_results
             .values()
             .filter(|r| r.success && r.final_answer.is_some())
             .collect();
@@ -328,7 +352,7 @@ impl MultiAgentNode {
                 "No successful results to vote on".to_string(),
                 parallel_result.agent_results,
                 parallel_result.all_steps,
-                parallel_result.total_duration
+                parallel_result.total_duration,
             ));
         }
 
@@ -351,13 +375,17 @@ impl MultiAgentNode {
             winning_answer,
             parallel_result.agent_results,
             parallel_result.all_steps,
-            parallel_result.total_duration
+            parallel_result.total_duration,
         ))
     }
 
-    async fn execute_round_robin(&self, task: &str, start_time: std::time::Instant) -> Result<MultiAgentResult> {
+    async fn execute_round_robin(
+        &self,
+        task: &str,
+        start_time: std::time::Instant,
+    ) -> Result<MultiAgentResult> {
         info!("Executing round-robin strategy");
-        
+
         let mut results = HashMap::new();
         let mut all_steps = Vec::new();
         let mut current_task = task.to_string();
@@ -366,31 +394,34 @@ impl MultiAgentNode {
 
         while round <= MAX_ROUNDS {
             info!("Round-robin round {}", round);
-            
+
             for (agent_name, agent) in &self.agents {
                 info!("Agent '{}' executing in round {}", agent_name, round);
-                
+
                 match agent.execute_task(&current_task).await {
                     Ok(result) => {
-                        results.insert(format!("{}_{}", agent_name, round), result.clone());
+                        results.insert(format!("{agent_name}_{round}"), result.clone());
                         all_steps.extend(result.steps);
-                        
-                        if result.success {
-                            if let Some(answer) = &result.final_answer {
-                                // Check if this looks like a final answer
-                                if answer.to_lowercase().contains("final") || 
-                                   answer.to_lowercase().contains("complete") ||
-                                   round == MAX_ROUNDS {
-                                    return Ok(MultiAgentResult::success(
-                                        answer.clone(),
-                                        results,
-                                        all_steps,
-                                        start_time.elapsed()
-                                    ));
-                                }
-                                // Use this as input for next round
-                                current_task = format!("Previous result: {}\n\nRefine or improve this result.", answer);
+
+                        if result.success
+                            && let Some(answer) = &result.final_answer
+                        {
+                            // Check if this looks like a final answer
+                            if answer.to_lowercase().contains("final")
+                                || answer.to_lowercase().contains("complete")
+                                || round == MAX_ROUNDS
+                            {
+                                return Ok(MultiAgentResult::success(
+                                    answer.clone(),
+                                    results,
+                                    all_steps,
+                                    start_time.elapsed(),
+                                ));
                             }
+                            // Use this as input for next round
+                            current_task = format!(
+                                "Previous result: {answer}\n\nRefine or improve this result."
+                            );
                         }
                     }
                     Err(e) => {
@@ -398,12 +429,13 @@ impl MultiAgentNode {
                     }
                 }
             }
-            
+
             round += 1;
         }
 
         // Return best result from final round
-        let final_result = results.values()
+        let final_result = results
+            .values()
             .filter(|r| r.success)
             .last()
             .and_then(|r| r.final_answer.clone())
@@ -413,7 +445,7 @@ impl MultiAgentNode {
             final_result,
             results,
             all_steps,
-            start_time.elapsed()
+            start_time.elapsed(),
         ))
     }
 }
@@ -422,44 +454,65 @@ impl MultiAgentNode {
 impl Node for MultiAgentNode {
     type State = MultiAgentState;
 
-    async fn execute(&self, context: Context) -> std::result::Result<(Context, Self::State), FlowError> {
+    async fn execute(
+        &self,
+        context: Context,
+    ) -> std::result::Result<(Context, Self::State), FlowError> {
         // Extract task from context
-        let task = context.get_json("task")?
-            .and_then(|v| v.as_str().map(|s| s.to_string()))
+        let task: String = context
+            .get_json("task")?
+            .and_then(|v: serde_json::Value| v.as_str().map(|s| s.to_string()))
             .ok_or_else(|| FlowError::context("No task provided in context"))?;
 
         // Execute multi-agent workflow
         match self.execute_multi_agent(&task).await {
             Ok(result) => {
                 let mut new_context = context;
-                
+
                 // Store result in context
                 new_context.set("multi_agent_result", serde_json::to_value(&result)?)?;
-                new_context.set("agent_results", serde_json::to_value(&result.agent_results)?)?;
+                new_context.set(
+                    "agent_results",
+                    serde_json::to_value(&result.agent_results)?,
+                )?;
                 new_context.set("all_steps", serde_json::to_value(&result.all_steps)?)?;
-                
+
                 if result.success {
                     new_context.set("final_answer", &result.final_result)?;
-                    Ok((new_context, MultiAgentState::Completed { 
-                        final_result: result.final_result 
-                    }))
+                    Ok((
+                        new_context,
+                        MultiAgentState::Completed {
+                            final_result: result.final_result,
+                        },
+                    ))
                 } else {
-                    new_context.set("error", &result.error.unwrap_or_default())?;
-                    Ok((new_context, MultiAgentState::Failed { 
-                        error: result.error.unwrap_or_else(|| "Unknown multi-agent error".to_string())
-                    }))
+                    let error_msg = result.error.clone().unwrap_or_default();
+                    new_context.set("error", &error_msg)?;
+                    Ok((
+                        new_context,
+                        MultiAgentState::Failed {
+                            error: result
+                                .error
+                                .unwrap_or_else(|| "Unknown multi-agent error".to_string()),
+                        },
+                    ))
                 }
             }
             Err(e) => {
                 let mut new_context = context;
-                new_context.set("error", &e.to_string())?;
-                Ok((new_context, MultiAgentState::Failed { error: e.to_string() }))
+                new_context.set("error", e.to_string())?;
+                Ok((
+                    new_context,
+                    MultiAgentState::Failed {
+                        error: e.to_string(),
+                    },
+                ))
             }
         }
     }
 
-    fn name(&self) -> &str {
-        &self.name
+    fn name(&self) -> String {
+        self.name.clone()
     }
 }
 
@@ -480,7 +533,7 @@ impl MultiAgentResult {
         final_result: String,
         agent_results: HashMap<String, AgentResult>,
         all_steps: Vec<AgentStep>,
-        duration: std::time::Duration
+        duration: std::time::Duration,
     ) -> Self {
         Self {
             success: true,
@@ -497,7 +550,7 @@ impl MultiAgentResult {
         error: String,
         agent_results: HashMap<String, AgentResult>,
         all_steps: Vec<AgentStep>,
-        duration: std::time::Duration
+        duration: std::time::Duration,
     ) -> Self {
         Self {
             success: false,
@@ -634,14 +687,16 @@ impl MultiAgentNodeBuilder {
 
     pub async fn build(self) -> Result<MultiAgentNode> {
         let agent_registry = Arc::new(AgentRegistry::new());
-        
+
         // Register all agents
-        for (name, agent) in &self.agents {
-            agent_registry.register_agent(agent.clone()).await?;
+        for agent in self.agents.values() {
+            agent_registry
+                .register(agent.config.name.clone(), agent.clone())
+                .await;
         }
 
         let mut node = MultiAgentNode::new(self.name, self.strategy, agent_registry);
-        
+
         if let Some(coordinator) = self.coordinator {
             node = node.with_coordinator(coordinator);
         }
@@ -664,7 +719,6 @@ impl MultiAgentNodeBuilder {
 mod tests {
     use super::*;
     use crate::builders::AgentNodeBuilder;
-    use crate::agent_types::ModelProvider;
 
     #[tokio::test]
     async fn test_multi_agent_node_creation() {
@@ -673,7 +727,7 @@ mod tests {
                 .with_openai_model("gpt-4o-mini")
                 .build()
                 .await
-                .unwrap()
+                .unwrap(),
         );
 
         let agent2 = Arc::new(
@@ -681,7 +735,7 @@ mod tests {
                 .with_openai_model("gpt-4o-mini")
                 .build()
                 .await
-                .unwrap()
+                .unwrap(),
         );
 
         let multi_agent = MultiAgentNodeBuilder::new("team")
@@ -700,14 +754,20 @@ mod tests {
     fn test_execution_plan() {
         let plan = ExecutionPlan::new()
             .add_phase(
-                ExecutionPhase::new("research", vec!["researcher1".to_string(), "researcher2".to_string()])
-                    .with_strategy(CoordinationStrategy::Parallel)
+                ExecutionPhase::new(
+                    "research",
+                    vec!["researcher1".to_string(), "researcher2".to_string()],
+                )
+                .with_strategy(CoordinationStrategy::Parallel),
             )
             .add_phase(
                 ExecutionPhase::new("analysis", vec!["analyst".to_string()])
-                    .with_strategy(CoordinationStrategy::Sequential)
+                    .with_strategy(CoordinationStrategy::Sequential),
             )
-            .add_dependency("analyst", vec!["researcher1".to_string(), "researcher2".to_string()])
+            .add_dependency(
+                "analyst",
+                vec!["researcher1".to_string(), "researcher2".to_string()],
+            )
             .with_timeout(std::time::Duration::from_secs(300));
 
         assert_eq!(plan.phases.len(), 2);
@@ -718,12 +778,17 @@ mod tests {
     #[test]
     fn test_multi_agent_state_transitions() {
         use MultiAgentState::*;
-        
+
         assert!(Ready.can_transition_to(&Planning));
-        assert!(Planning.can_transition_to(&Executing { 
-            active_agents: vec!["agent1".to_string()], 
+        assert!(Planning.can_transition_to(&Executing {
+            active_agents: vec!["agent1".to_string()],
             completed_agents: vec![]
         }));
-        assert!(!Completed { final_result: "done".to_string() }.can_transition_to(&Planning));
+        assert!(
+            !Completed {
+                final_result: "done".to_string()
+            }
+            .can_transition_to(&Planning)
+        );
     }
 }

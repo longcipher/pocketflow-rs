@@ -1,9 +1,11 @@
+//! Agent types and configuration for PocketFlow AI agents.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Agent capabilities
+/// Agent capabilities that define what an agent can do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentCapability {
     /// Basic agent functionality
@@ -28,7 +30,7 @@ pub enum AgentCapability {
     Custom(String),
 }
 
-/// Agent role in multi-agent systems
+/// Agent role in multi-agent systems.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentRole {
     /// Independent agent
@@ -45,7 +47,7 @@ pub enum AgentRole {
     Custom(String),
 }
 
-/// Agent execution mode
+/// Agent execution mode determining how the agent processes requests.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionMode {
     /// Synchronous execution
@@ -58,16 +60,20 @@ pub enum ExecutionMode {
     Background,
 }
 
-/// Agent priority level
+/// Agent priority level for task scheduling.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Priority {
+    /// Low priority
     Low,
+    /// Normal priority
     Normal,
+    /// High priority
     High,
+    /// Critical priority
     Critical,
 }
 
-/// Agent configuration
+/// Configuration for an AI agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Agent unique identifier
@@ -176,7 +182,7 @@ impl AgentConfig {
     }
 }
 
-/// Model configuration for genai integration
+/// Model configuration for integrating with AI providers via genai.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
     /// Model provider
@@ -221,24 +227,35 @@ impl ModelConfig {
     }
 }
 
-/// Model provider types
+/// Supported AI model providers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelProvider {
+    /// OpenAI provider (GPT models)
     OpenAI,
+    /// Anthropic provider (Claude models)
     Anthropic,
+    /// Google provider (Gemini models)
     Google,
+    /// Ollama local models
     Ollama,
+    /// Custom provider with name and base URL
     Custom { name: String, base_url: String },
 }
 
-/// Model parameters
+/// Parameters for model inference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelParameters {
+    /// Controls randomness (0.0 = deterministic, 1.0 = very random)
     pub temperature: f32,
+    /// Maximum tokens to generate
     pub max_tokens: Option<usize>,
+    /// Nucleus sampling parameter
     pub top_p: Option<f32>,
+    /// Frequency penalty for repetition reduction
     pub frequency_penalty: Option<f32>,
+    /// Presence penalty for topic diversity
     pub presence_penalty: Option<f32>,
+    /// Stop sequences to end generation
     pub stop_sequences: Vec<String>,
 }
 
@@ -277,13 +294,18 @@ impl ModelParameters {
     }
 }
 
-/// API configuration
+/// API configuration for connecting to AI services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
+    /// API key for authentication
     pub api_key: Option<String>,
+    /// Base URL for the API endpoint
     pub base_url: Option<String>,
+    /// Request timeout duration
     pub timeout: std::time::Duration,
+    /// Maximum number of retry attempts
     pub max_retries: usize,
+    /// Delay between retry attempts
     pub retry_delay: std::time::Duration,
 }
 
@@ -321,16 +343,24 @@ impl ApiConfig {
     }
 }
 
-/// Agent step information
+/// Information about a single execution step performed by an agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentStep {
+    /// Sequential step number
     pub step_number: usize,
+    /// When the step was executed
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Type of step performed
     pub step_type: AgentStepType,
+    /// Input data for the step
     pub input: serde_json::Value,
+    /// Output data from the step (if any)
     pub output: Option<serde_json::Value>,
+    /// Error message (if step failed)
     pub error: Option<String>,
+    /// How long the step took to execute
     pub duration: Option<std::time::Duration>,
+    /// Additional metadata about the step
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -373,7 +403,7 @@ impl AgentStep {
     }
 }
 
-/// Types of agent steps
+/// Types of steps an agent can perform during execution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentStepType {
     /// Thinking/reasoning step
@@ -390,19 +420,31 @@ pub enum AgentStepType {
     Planning,
     /// Memory update step
     MemoryUpdate,
+    /// Response step
+    Response,
     /// Custom step type
     Custom(String),
 }
 
-/// Agent execution result
+/// Alias for AgentStepType used by streaming module for backward compatibility
+pub type StepType = AgentStepType;
+
+/// Final result of agent execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentResult {
+    /// Whether the execution was successful
     pub success: bool,
+    /// Final answer from the agent
     pub final_answer: Option<String>,
+    /// All execution steps performed
     pub steps: Vec<AgentStep>,
+    /// Total execution time
     pub total_duration: std::time::Duration,
+    /// Token usage statistics
     pub token_usage: Option<TokenUsage>,
+    /// Error message if execution failed
     pub error: Option<String>,
+    /// Additional metadata
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -446,11 +488,14 @@ impl AgentResult {
     }
 }
 
-/// Token usage tracking
+/// Token usage statistics for tracking AI model consumption.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsage {
+    /// Number of tokens in the prompt
     pub prompt_tokens: usize,
+    /// Number of tokens in the completion
     pub completion_tokens: usize,
+    /// Total tokens used (prompt + completion)
     pub total_tokens: usize,
 }
 

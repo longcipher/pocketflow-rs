@@ -18,7 +18,12 @@ pub enum FlowError {
 
     /// Invalid state transition.
     #[error("Invalid transition from {from:?} to {to:?}")]
-    InvalidTransition { from: String, to: String },
+    InvalidTransition {
+        /// Source state
+        from: String,
+        /// Target state
+        to: String,
+    },
 
     /// Serialization/Deserialization error.
     #[error("Serialization error: {0}")]

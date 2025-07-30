@@ -50,11 +50,17 @@
 //! }
 //! ```
 
+/// Core tool abstractions and trait definitions.
 pub mod core;
+/// Custom tool implementations and helpers.
 pub mod custom;
+/// Error types for tool operations.
 pub mod error;
+/// Tool registry for discovery and execution.
 pub mod registry;
+/// Utility functions for tool development.
 pub mod utils;
+/// Parameter validation utilities.
 pub mod validation;
 
 // Re-export commonly used types

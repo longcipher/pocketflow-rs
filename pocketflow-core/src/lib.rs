@@ -55,6 +55,6 @@ pub mod prelude {
             AdvancedFlow, AdvancedFlowBuilder, AdvancedFlowResult, FlowRegistry, SharedFlowState,
         },
         node::{BatchNode, ConditionalNode, FnNode, Node, PassthroughNode},
-        state::FlowState,
+        state::{FlowState, SimpleState},
     };
 }

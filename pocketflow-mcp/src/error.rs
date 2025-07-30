@@ -6,19 +6,34 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum McpError {
     #[error("MCP connection failed: {message}")]
-    ConnectionFailed { message: String },
+    ConnectionFailed {
+        /// Error message
+        message: String,
+    },
 
     #[error("Tool '{tool_name}' not found")]
-    ToolNotFound { tool_name: String },
+    ToolNotFound {
+        /// Name of the tool that was not found
+        tool_name: String,
+    },
 
     #[error("Tool execution failed: {message}")]
-    ToolExecutionFailed { message: String },
+    ToolExecutionFailed {
+        /// Error message
+        message: String,
+    },
 
     #[error("Invalid tool arguments: {message}")]
-    InvalidArguments { message: String },
+    InvalidArguments {
+        /// Error message
+        message: String,
+    },
 
     #[error("Resource '{uri}' not found")]
-    ResourceNotFound { uri: String },
+    ResourceNotFound {
+        /// URI of the resource
+        uri: String,
+    },
 
     #[error("MCP server startup failed: {message}")]
     ServerStartupFailed { message: String },

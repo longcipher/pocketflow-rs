@@ -1,10 +1,12 @@
+//! Error types for PocketFlow agent operations.
+
 use pocketflow_core::prelude::FlowError;
 use thiserror::Error;
 
-/// Result type for agent operations
+/// Result type for agent operations.
 pub type Result<T> = std::result::Result<T, AgentError>;
 
-/// Main error type for agent operations
+/// Main error type for agent operations.
 #[derive(Error, Debug, Clone)]
 pub enum AgentError {
     #[error("Configuration error: {0}")]

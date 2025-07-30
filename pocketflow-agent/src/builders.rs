@@ -1,12 +1,13 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use crate::agent_node::{AgentNode};
-use crate::agent_types::{
-    AgentConfig, AgentCapability, AgentRole, ExecutionMode, Priority,
-    ModelConfig, ModelProvider, ModelParameters, ApiConfig
+use crate::{
+    agent_node::{AgentNode, AgentRegistry},
+    agent_types::{
+        AgentCapability, AgentConfig, AgentRole, ApiConfig, ExecutionMode, ModelConfig,
+        ModelParameters, ModelProvider, Priority,
+    },
+    error::Result,
 };
-use crate::error::{AgentError, Result};
 
 /// Builder for creating AgentNode instances
 pub struct AgentNodeBuilder {
@@ -100,72 +101,67 @@ impl AgentNodeBuilder {
     }
 
     /// Set OpenAI model
-    pub fn with_openai_model(mut self, model_name: impl Into<String>) -> Self {
+    pub fn with_openai_model(self, model_name: impl Into<String>) -> Self {
         self.with_model(ModelProvider::OpenAI, model_name)
     }
 
     /// Set Anthropic model
-    pub fn with_anthropic_model(mut self, model_name: impl Into<String>) -> Self {
+    pub fn with_anthropic_model(self, model_name: impl Into<String>) -> Self {
         self.with_model(ModelProvider::Anthropic, model_name)
     }
 
     /// Set Google model
-    pub fn with_google_model(mut self, model_name: impl Into<String>) -> Self {
+    pub fn with_google_model(self, model_name: impl Into<String>) -> Self {
         self.with_model(ModelProvider::Google, model_name)
     }
 
     /// Set Ollama model
-    pub fn with_ollama_model(mut self, model_name: impl Into<String>) -> Self {
+    pub fn with_ollama_model(self, model_name: impl Into<String>) -> Self {
         self.with_model(ModelProvider::Ollama, model_name)
     }
 
     /// Set model parameters
-    pub fn with_model_parameters(mut self, parameters: ModelParameters) -> Self {
-        if let Some(ref mut config) = self.model_config {
-            config.parameters = parameters;
-        } else {
-            let mut config = ModelConfig::default();
-            config.parameters = parameters;
-            self.model_config = Some(config);
-        }
-        self
+    pub fn with_parameters(self, parameters: ModelParameters) -> Self {
+        self.with_model_config(ModelConfig {
+            parameters,
+            ..Default::default()
+        })
     }
 
     /// Set model temperature
-    pub fn with_temperature(mut self, temperature: f32) -> Self {
-        let params = self.model_config
+    pub fn with_temperature(self, temperature: f32) -> Self {
+        let params = self
+            .model_config
             .as_ref()
             .map(|c| c.parameters.clone())
             .unwrap_or_default()
             .with_temperature(temperature);
-        self.with_model_parameters(params)
+        self.with_parameters(params)
     }
 
     /// Set max tokens
-    pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
-        let params = self.model_config
+    pub fn with_max_tokens(self, max_tokens: usize) -> Self {
+        let params = self
+            .model_config
             .as_ref()
             .map(|c| c.parameters.clone())
             .unwrap_or_default()
             .with_max_tokens(max_tokens);
-        self.with_model_parameters(params)
+        self.with_parameters(params)
     }
 
-    /// Set API configuration
-    pub fn with_api_config(mut self, api_config: ApiConfig) -> Self {
-        if let Some(ref mut config) = self.model_config {
-            config.api_config = api_config;
-        } else {
-            let mut config = ModelConfig::default();
-            config.api_config = api_config;
-            self.model_config = Some(config);
-        }
-        self
+    /// Configure API settings
+    pub fn with_api_config(self, api_config: ApiConfig) -> Self {
+        self.with_model_config(ModelConfig {
+            api_config,
+            ..Default::default()
+        })
     }
 
     /// Set API key
-    pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
-        let api_config = self.model_config
+    pub fn with_api_key(self, api_key: impl Into<String>) -> Self {
+        let api_config = self
+            .model_config
             .as_ref()
             .map(|c| c.api_config.clone())
             .unwrap_or_default()
@@ -174,8 +170,9 @@ impl AgentNodeBuilder {
     }
 
     /// Set base URL
-    pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
-        let api_config = self.model_config
+    pub fn with_base_url(self, base_url: impl Into<String>) -> Self {
+        let api_config = self
+            .model_config
             .as_ref()
             .map(|c| c.api_config.clone())
             .unwrap_or_default()
@@ -198,27 +195,23 @@ impl AgentNodeBuilder {
     /// Build the AgentNode
     pub async fn build(mut self) -> Result<AgentNode> {
         // Use provided model config or default
-        let model_config = self.model_config.unwrap_or_else(|| {
-            ModelConfig::new(ModelProvider::OpenAI, "gpt-4o-mini")
-        });
+        let model_config = self
+            .model_config
+            .unwrap_or_else(|| ModelConfig::new(ModelProvider::OpenAI, "gpt-4o-mini"));
 
         // Update agent config with model config
         self.config.model_config = model_config.clone();
 
-        // Create model adapter
-        let model_adapter = Arc::new(ModelAdapter::new(model_config).await?);
-
         // Create agent node
-        let mut agent = AgentNode::new(self.config, model_adapter);
+        let mut agent = AgentNode::new(self.config);
 
-        // Add registries if provided
+        // Add tool registry if provided
         if let Some(tool_registry) = self.tool_registry {
-            agent = agent.with_tool_registry(tool_registry);
+            agent = agent.with_tools(tool_registry);
         }
 
-        if let Some(agent_registry) = self.agent_registry {
-            agent = agent.with_agent_registry(agent_registry);
-        }
+        // Note: agent_registry could be used for multi-agent coordination in the future
+        // For now, we'll just create the agent without it
 
         Ok(agent)
     }
@@ -288,20 +281,20 @@ pub struct AgentPresets;
 impl AgentPresets {
     /// Create a basic function-calling agent
     pub fn function_calling_agent(name: impl Into<String>) -> AgentNodeBuilder {
-        AgentNodeBuilder::new(name, "An AI agent capable of calling tools to complete tasks")
-            .with_capabilities(vec![
-                AgentCapability::Basic,
-                AgentCapability::ToolCalling,
-            ])
-            .with_role(AgentRole::Independent)
-            .with_system_prompt(
-                "You are a helpful AI assistant that can use tools to complete tasks. \
+        AgentNodeBuilder::new(
+            name,
+            "An AI agent capable of calling tools to complete tasks",
+        )
+        .with_capabilities(vec![AgentCapability::Basic, AgentCapability::ToolCalling])
+        .with_role(AgentRole::Independent)
+        .with_system_prompt(
+            "You are a helpful AI assistant that can use tools to complete tasks. \
                 When you need to use a tool, respond with JSON in this format: \
                 {\"tool_call\": \"tool_name\", \"parameters\": {...}}. \
-                When you have a final answer, respond with: Final Answer: [your answer]"
-            )
-            .with_max_steps(15)
-            .with_temperature(0.7)
+                When you have a final answer, respond with: Final Answer: [your answer]",
+        )
+        .with_max_steps(15)
+        .with_temperature(0.7)
     }
 
     /// Create a coding specialist agent
@@ -351,7 +344,7 @@ impl AgentPresets {
                 "You are a team coordinator. Your role is to break down complex tasks, \
                 delegate subtasks to appropriate specialist agents, and synthesize their \
                 results into a final answer. To delegate, use: \
-                delegate to \"agent_name\" task: \"specific task description\""
+                delegate to \"agent_name\" task: \"specific task description\"",
             )
             .with_max_steps(30)
             .with_temperature(0.6)
@@ -449,9 +442,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_quick_builders() {
-        let _code_agent = AgentNodeBuilder::code_specialist("coder").build().await.unwrap();
-        let _researcher = AgentNodeBuilder::researcher("finder").build().await.unwrap();
+        let _code_agent = AgentNodeBuilder::code_specialist("coder")
+            .build()
+            .await
+            .unwrap();
+        let _researcher = AgentNodeBuilder::researcher("finder")
+            .build()
+            .await
+            .unwrap();
         let _coordinator = AgentNodeBuilder::coordinator("boss").build().await.unwrap();
-        let _planner = AgentNodeBuilder::planner("strategist").build().await.unwrap();
+        let _planner = AgentNodeBuilder::planner("strategist")
+            .build()
+            .await
+            .unwrap();
     }
 }

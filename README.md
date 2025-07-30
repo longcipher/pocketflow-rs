@@ -1,20 +1,21 @@
 # PocketFlow-RS
 
-A modern workflow framework ecosystem for Rust, providing type-safe, async workflow execution with powerful integrations.
+A modern workflow framework ecosystem for Rust, providing type-safe, async workflow execution with powerful integrations including AI agents, cognitive capabilities, and tool automation.
 
 ## 📦 Workspace Structure
 
-This is a Cargo workspace containing the following crates:
+This is a Cargo workspace containing five specialized crates:
 
 ### [`pocketflow-core`](./pocketflow-core/)
 
-The core workflow framework providing:
+The foundation workflow framework providing:
 
 - Type-safe state management with compile-time guarantees
-- Async/await support built on Tokio
+- Async/await support built on Tokio and dptree
 - Flexible context system with typed and JSON storage
 - Node-based architecture with dependency injection
 - Advanced flows with middleware and analytics
+- Batch processing and error handling with eyre
 
 ### [`pocketflow-mcp`](./pocketflow-mcp/)
 
@@ -24,6 +25,37 @@ Model Context Protocol (MCP) integration for workflows:
 - MCP server implementation to expose workflow capabilities
 - Seamless context integration between MCP and workflows
 - Registry management for multiple connections
+- HTTP transport with authentication support
+
+### [`pocketflow-cognitive`](./pocketflow-cognitive/)
+
+Cognitive extensions adding AI reasoning capabilities:
+
+- Chain-of-thought and reflection nodes
+- Goal-oriented and hierarchical planning
+- Multi-layered memory systems (working, episodic, semantic)
+- Non-intrusive extension of existing Node types
+- MCP integration for AI service calls
+
+### [`pocketflow-agent`](./pocketflow-agent/)
+
+AI Agent framework with genai integration:
+
+- AgentNode implementation for LLM-powered workflows
+- Multi-step agent execution with history tracking
+- Tool registry integration for agent capabilities
+- Streaming and multi-agent coordination support
+- Support for multiple AI providers (OpenAI, etc.)
+
+### [`pocketflow-tools`](./pocketflow-tools/)
+
+Comprehensive tool system for workflow automation:
+
+- Tool abstraction with JSON schema validation
+- Tool registry for discovery and execution
+- Built-in utilities for common operations
+- Parameter validation and retry mechanisms
+- Integration across the entire ecosystem
 
 ## 🚀 Quick Start
 
@@ -36,7 +68,6 @@ pocketflow-core = "0.1.0"
 
 ```rust
 use pocketflow_core::prelude::*;
-use async_trait::async_trait;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum WorkflowState {
@@ -56,7 +87,7 @@ impl Node for ProcessingNode {
     type State = WorkflowState;
 
     async fn execute(&self, mut context: Context) -> Result<(Context, Self::State)> {
-        context.set("result".to_string(), "processed")?;
+        context.set("result", "processed")?;
         Ok((context, WorkflowState::Success))
     }
 
@@ -69,7 +100,7 @@ impl Node for ProcessingNode {
 async fn main() -> Result<()> {
     let flow = SimpleFlow::builder()
         .initial_state(WorkflowState::Start)
-        .add_node(WorkflowState::Start, ProcessingNode)
+        .node(WorkflowState::Start, ProcessingNode)
         .build()?;
 
     let result = flow.execute(Context::new()).await?;
@@ -78,43 +109,98 @@ async fn main() -> Result<()> {
 }
 ```
 
-### Workflow with MCP Integration
+### AI Agent Workflow
 
 ```toml
 [dependencies]
 pocketflow-core = "0.1.0"
+pocketflow-agent = "0.1.0"
+pocketflow-tools = "0.1.0"
+```
+
+```rust
+use pocketflow_agent::prelude::*;
+use pocketflow_core::prelude::*;
+use pocketflow_tools::prelude::*;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Create agent configuration
+    let agent_config = AgentConfig {
+        name: "task_processor".to_string(),
+        model_config: ModelConfig {
+            provider: ModelProvider::OpenAI,
+            model_name: "gpt-4o-mini".to_string(),
+            ..Default::default()
+        },
+        system_prompt: "You are a helpful task processing agent".to_string(),
+        ..Default::default()
+    };
+
+    // Create tool registry
+    let mut tool_registry = ToolRegistry::new();
+    let text_tool = pocketflow_tools::custom::helpers::uppercase_tool();
+    tool_registry.register_tool(Box::new(text_tool)).await?;
+
+    // Create agent node with tools
+    let agent_node = AgentNode::new(agent_config)
+        .with_tools(Arc::new(tool_registry));
+
+    // Use in workflow
+    let mut context = Context::new();
+    context.set("input", "Process this text with AI")?;
+    
+    let (result_context, _state) = agent_node.execute(context).await?;
+    if let Ok(Some(result)) = result_context.get_json::<AgentResult>("agent_result") {
+        println!("Agent response: {:?}", result.final_answer);
+    }
+    
+    Ok(())
+}
+```
+
+### Cognitive Workflow with Planning
+
+```toml
+[dependencies]
+pocketflow-core = "0.1.0"
+pocketflow-cognitive = "0.1.0"
 pocketflow-mcp = "0.1.0"
 ```
 
 ```rust
+use pocketflow_cognitive::prelude::*;
 use pocketflow_core::prelude::*;
-use pocketflow_mcp::prelude::*;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Create MCP client
-    let client = UltraFastMcpClient::new("http://localhost:8080").await?;
+    // Mock MCP client for cognitive services
+    let mcp_client = Arc::new(MockMcpClient::new());
     
-    // Build workflow with MCP integration
-    let flow = SimpleFlow::builder()
-        .initial_state(WorkflowState::Start)
-        .add_node(WorkflowState::Start, McpClientNode::new(
-            "ai_tool_caller".to_string(),
-            Arc::new(client),
-            "summarize_text".to_string(),
-            WorkflowState::Processing,
-            WorkflowState::Success,
-            WorkflowState::Error,
-        ))
+    // Create planning node
+    let planner = GoalOrientedPlanningNode::builder()
+        .name("task_planner")
+        .with_mcp_client(mcp_client)
+        .with_goal(Goal {
+            id: "optimize_workflow".to_string(),
+            description: "Optimize data processing workflow".to_string(),
+            success_criteria: vec!["Reduce latency by 30%".to_string()],
+            constraints: vec!["Budget under $5k".to_string()],
+            priority: 8,
+        })
+        .on_success(WorkflowState::Success)
+        .on_error(WorkflowState::Error)
         .build()?;
 
-    let mut context = Context::new();
-    context.set("tool_args".to_string(), serde_json::json!({
-        "text": "Long document to summarize..."
-    }))?;
+    let flow = SimpleFlow::builder()
+        .initial_state(WorkflowState::Start)
+        .node(WorkflowState::Start, planner)
+        .build()?;
 
-    let result = flow.execute(context).await?;
-    println!("Summary result: {:?}", result.context.get_json::<String>("tool_result"));
+    let result = flow.execute(Context::new()).await?;
+    println!("Planning completed: {:?}", result.final_state);
     Ok(())
 }
 ```
@@ -122,26 +208,40 @@ async fn main() -> Result<()> {
 ## 🏗️ Architecture
 
 ```text
-┌─────────────────┐    ┌──────────────────┐
-│ pocketflow-core │    │ pocketflow-mcp   │
-├─────────────────┤    ├──────────────────┤
-│ • Node trait    │    │ • MCP Client     │
-│ • Context       │    │ • MCP Server     │
-│ • FlowState     │    │ • Registry       │
-│ • SimpleFlow    │    │ • Context Ext    │
-│ • AdvancedFlow  │    │ • MCP Nodes      │
-└─────────────────┘    └──────────────────┘
-         │                        │
-         └───────┬────────────────┘
-                 │
-    ┌─────────────────────────┐
-    │    Your Application     │
-    │                         │
-    │ • Custom Nodes          │
-    │ • Workflow Logic        │
-    │ • MCP Integrations      │
-    │ • Business Rules        │
-    └─────────────────────────┘
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐
+│ pocketflow-core │    │ pocketflow-mcp   │    │ pocketflow-cognitive│
+├─────────────────┤    ├──────────────────┤    ├─────────────────────┤
+│ • Node trait    │    │ • MCP Client     │    │ • ThinkingNode      │
+│ • Context       │    │ • MCP Server     │    │ • PlanningNode      │
+│ • FlowState     │    │ • Registry       │    │ • Memory Systems    │
+│ • SimpleFlow    │    │ • Context Ext    │    │ • Cognitive Traits  │
+│ • AdvancedFlow  │    │ • MCP Nodes      │    │ • Goal-Oriented     │
+└─────────────────┘    └──────────────────┘    └─────────────────────┘
+         │                        │                          │
+         └───────┬────────────────┼─────────────────────────┘
+                 │                │
+    ┌─────────────────────────┐   │    ┌─────────────────────┐
+    │  pocketflow-agent       │   │    │  pocketflow-tools   │
+    ├─────────────────────────┤   │    ├─────────────────────┤
+    │ • AgentNode             │   │    │ • Tool trait        │
+    │ • GenAI Integration     │   │    │ • ToolRegistry      │
+    │ • Multi-Agent Support   │   │    │ • Parameter Schema  │
+    │ • Execution History     │   │    │ • Validation        │
+    │ • Streaming             │   │    │ • Built-in Tools    │
+    └─────────────────────────┘   │    └─────────────────────┘
+                 │                │              │
+                 └────────────────┼──────────────┘
+                                  │
+                ┌─────────────────────────┐
+                │    Your Application     │
+                │                         │
+                │ • Custom Nodes          │
+                │ • Workflow Logic        │
+                │ • AI Agents             │
+                │ • Cognitive Planning    │
+                │ • Tool Integration      │
+                │ • MCP Services          │
+                └─────────────────────────┘
 ```
 
 ## 🔧 Development
@@ -160,7 +260,9 @@ just test
 
 # Run examples from specific crates
 cargo run --example basic --package pocketflow-core
-cargo run --example mcp_demo_simple --package pocketflow-mcp
+cargo run --example simple_agent_demo --package pocketflow-agent
+cargo run --example thinking_workflow --package pocketflow-cognitive
+cargo run --example simple_mcp_demo --package pocketflow-mcp
 ```
 
 ## 📋 Features by Crate
@@ -182,32 +284,80 @@ cargo run --example mcp_demo_simple --package pocketflow-mcp
 - ✅ MCP server implementation
 - ✅ Workflow context extensions
 - ✅ Registry management
-- ✅ HTTP transport
+- ✅ HTTP transport with authentication
 - ⏳ WebSocket transport (planned)
 - ⏳ Prompt templates (planned)
+
+### Cognitive Extensions Features
+
+- ✅ Chain-of-thought reasoning
+- ✅ Goal-oriented planning
+- ✅ Hierarchical planning
+- ✅ Multi-layered memory systems
+- ✅ Reflection and explanation nodes
+- ✅ MCP integration for AI services
+- ⏳ Adaptive planning (in development)
+- ⏳ Learning capabilities (planned)
+
+### AI Agent Features
+
+- ✅ GenAI integration (OpenAI, etc.)
+- ✅ AgentNode for workflow integration
+- ✅ Multi-step execution with history
+- ✅ Tool registry integration
+- ✅ Streaming support
+- ✅ Multiple agent coordination
+- ⏳ Custom model providers (planned)
+- ⏳ Advanced agent orchestration (planned)
+
+### Tool System Features
+
+- ✅ Tool abstraction with JSON schema
+- ✅ Parameter validation
+- ✅ Tool registry and discovery
+- ✅ Built-in utility tools
+- ✅ Retry and timeout mechanisms
+- ✅ Custom tool development
+- ⏳ Tool composition (planned)
+- ⏳ Advanced caching (planned)
 
 ## 🎯 Use Cases
 
 ### Data Processing Pipelines
 
-Use `pocketflow-core` for structured data transformations with state tracking.
+Use `pocketflow-core` for structured data transformations with state tracking and error handling.
 
-### AI Agent Workflows  
+### AI-Powered Workflows  
 
-Combine both crates to build AI agents that can call external tools via MCP while maintaining workflow state.
+Combine `pocketflow-agent` with `pocketflow-tools` to build intelligent workflows that can reason, plan, and execute complex tasks using LLMs.
+
+### Cognitive Task Planning
+
+Use `pocketflow-cognitive` for workflows that need planning, reasoning, and memory capabilities for complex problem-solving.
 
 ### API Orchestration
 
-Chain multiple service calls with error handling and state management.
+Chain multiple service calls with error handling, retry logic, and state management using the core framework.
 
-### Microservice Communication
+### Tool Automation
 
-Use MCP as a protocol for service-to-service communication within workflows.
+Use `pocketflow-tools` to create standardized, validated tool interfaces for workflow automation.
+
+### AI Agent Ecosystems
+
+Build multi-agent systems using `pocketflow-agent` with coordination, communication, and task delegation.
+
+### MCP Service Integration
+
+Use `pocketflow-mcp` as a protocol for service-to-service communication and external tool integration within workflows.
 
 ## 📚 Documentation
 
 - [Core Framework Documentation](./pocketflow-core/README.md)
 - [MCP Integration Documentation](./pocketflow-mcp/README.md)
+- [Cognitive Extensions Documentation](./pocketflow-cognitive/README.md)
+- [AI Agent Framework Documentation](./pocketflow-agent/README.md)
+- [Tool System Documentation](./pocketflow-tools/README.md)
 - [API Documentation](https://docs.rs/pocketflow-core)
 - [Examples Directory](./pocketflow-core/examples/)
 
@@ -222,4 +372,4 @@ Contributions are welcome! Please:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

@@ -1,4 +1,6 @@
-use std::sync::Arc;
+//! Agent node implementation for PocketFlow integration.
+
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use pocketflow_core::prelude::{Context, FlowError, FlowState, Node};
@@ -7,11 +9,11 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use crate::{
-    agent_types::{AgentConfig, AgentResult, AgentStep, AgentStepType},
+    agent_types::{AgentConfig, AgentResult, AgentStep, AgentStepType, ModelConfig},
     error::Result,
 };
 
-/// Agent states for flow control
+/// Agent states for flow control.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AgentState {
     /// Agent is ready to start
@@ -34,10 +36,99 @@ impl FlowState for AgentState {
     }
 }
 
-/// Agent node for PocketFlow integration
+/// Registry for managing multiple AI agents
+#[derive(Debug, Clone)]
+pub struct AgentRegistry {
+    agents: Arc<RwLock<HashMap<String, Arc<AgentNode>>>>,
+}
+
+impl AgentRegistry {
+    /// Create a new agent registry
+    pub fn new() -> Self {
+        Self {
+            agents: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Register an agent with the given name
+    pub async fn register(&self, name: String, agent: Arc<AgentNode>) {
+        let mut agents = self.agents.write().await;
+        agents.insert(name, agent);
+    }
+
+    /// Get an agent by name
+    pub async fn get(&self, name: &str) -> Option<Arc<AgentNode>> {
+        let agents = self.agents.read().await;
+        agents.get(name).cloned()
+    }
+
+    /// List all registered agent names
+    pub async fn list_agents(&self) -> Vec<String> {
+        let agents = self.agents.read().await;
+        agents.keys().cloned().collect()
+    }
+
+    /// Remove an agent from the registry
+    pub async fn remove(&self, name: &str) -> Option<Arc<AgentNode>> {
+        let mut agents = self.agents.write().await;
+        agents.remove(name)
+    }
+}
+
+impl Default for AgentRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Adapter for managing AI model interactions
+#[derive(Debug, Clone)]
+pub struct ModelAdapter {
+    config: ModelConfig,
+}
+
+impl ModelAdapter {
+    /// Create a new model adapter
+    pub async fn new(config: ModelConfig) -> Result<Self> {
+        Ok(Self { config })
+    }
+
+    /// Get the model configuration
+    pub fn config(&self) -> &ModelConfig {
+        &self.config
+    }
+
+    /// Execute a prompt with the configured model
+    pub async fn execute_prompt(&self, prompt: &str) -> Result<String> {
+        // For now, return a mock response
+        // In a real implementation, this would interface with the actual model
+        info!("Executing prompt with {} model", self.config.model_name);
+        Ok(format!(
+            "Response from {}: {}",
+            self.config.model_name, prompt
+        ))
+    }
+
+    /// Check if the model supports tool calling
+    pub fn supports_tools(&self) -> bool {
+        // Check if the model supports function calling
+        matches!(
+            self.config.model_name.as_str(),
+            "gpt-4" | "gpt-4-turbo" | "gpt-4o" | "gpt-4o-mini" | "gpt-3.5-turbo"
+        )
+    }
+}
+
+/// AI agent node that integrates with PocketFlow workflows.
+///
+/// This node provides LLM-powered processing capabilities within workflows,
+/// enabling intelligent decision making and tool usage.
 pub struct AgentNode {
+    /// Agent configuration
     pub config: AgentConfig,
+    /// Optional tool registry for agent capabilities
     pub tool_registry: Option<Arc<ToolRegistry>>,
+    /// Execution history tracking
     pub execution_history: Arc<RwLock<Vec<AgentStep>>>,
 }
 
@@ -121,6 +212,11 @@ impl AgentNode {
             metadata: std::collections::HashMap::new(),
             error: None,
         })
+    }
+
+    /// Execute a task with the given input (alias for step method)
+    pub async fn execute_task(&self, input: &str) -> Result<AgentResult> {
+        self.step(input.to_string()).await
     }
 
     /// Get execution history

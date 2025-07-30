@@ -1,6 +1,6 @@
 use std::fmt;
 
-use pocketflow_core::error::FlowError;
+use pocketflow_core::prelude::FlowError;
 use thiserror::Error;
 
 /// Result type for tool operations

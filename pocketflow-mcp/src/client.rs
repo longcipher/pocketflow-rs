@@ -21,9 +21,15 @@ pub enum McpTransportConfig {
     /// Connect to an MCP server via child process (stdio)
     Stdio,
     /// Connect to an MCP server via HTTP
-    Http { url: String },
+    Http {
+        /// HTTP endpoint URL
+        url: String,
+    },
     /// Connect with custom configuration
-    Custom { config: String },
+    Custom {
+        /// Custom configuration string
+        config: String,
+    },
 }
 
 /// Trait for MCP client operations.
