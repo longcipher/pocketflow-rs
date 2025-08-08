@@ -56,12 +56,16 @@ pub mod core;
 pub mod custom;
 /// Error types for tool operations.
 pub mod error;
+/// Python execution tool implementation.
+pub mod python;
 /// Tool registry for discovery and execution.
 pub mod registry;
 /// Utility functions for tool development.
 pub mod utils;
 /// Parameter validation utilities.
 pub mod validation;
+/// Web search/fetch tool implementation.
+pub mod web;
 
 // Re-export commonly used types
 pub use core::{
@@ -84,8 +88,10 @@ pub mod prelude {
             ToolParameters, ToolResult,
         },
         error::{ErrorCategory, Result, ToolError},
+        python::PythonExecutionTool,
         registry::{ToolComposition, ToolRegistry, ToolRequest},
         utils::{conversion_utils, perf_utils, template_utils, tool_utils},
+        web::WebSearchTool,
     };
 }
 

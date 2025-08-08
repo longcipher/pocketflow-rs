@@ -272,7 +272,11 @@ Format your response as a structured list of sub-goals.
                 dependencies: vec![],
                 estimated_duration: Duration::from_secs(180),
                 required_tools: vec![],
-                success_criteria: vec!["initialization_complete".to_string()],
+                success_criteria: vec![json!("initialization_complete")],
+                enforce_success_criteria: None,
+                max_retries: None,
+                initial_backoff_ms: None,
+                stop_on_error: None,
             },
             PlanStep {
                 id: format!("{}_execute", goal.id),
@@ -280,7 +284,16 @@ Format your response as a structured list of sub-goals.
                 dependencies: vec![format!("{}_init", goal.id)],
                 estimated_duration: Duration::from_secs(300),
                 required_tools: vec![],
-                success_criteria: goal.success_criteria.clone(),
+                success_criteria: goal
+                    .success_criteria
+                    .iter()
+                    .cloned()
+                    .map(|s| json!(s))
+                    .collect(),
+                enforce_success_criteria: None,
+                max_retries: None,
+                initial_backoff_ms: None,
+                stop_on_error: None,
             },
             PlanStep {
                 id: format!("{}_verify", goal.id),
@@ -288,7 +301,11 @@ Format your response as a structured list of sub-goals.
                 dependencies: vec![format!("{}_execute", goal.id)],
                 estimated_duration: Duration::from_secs(120),
                 required_tools: vec![],
-                success_criteria: vec!["verification_complete".to_string()],
+                success_criteria: vec![json!("verification_complete")],
+                enforce_success_criteria: None,
+                max_retries: None,
+                initial_backoff_ms: None,
+                stop_on_error: None,
             },
         ];
 

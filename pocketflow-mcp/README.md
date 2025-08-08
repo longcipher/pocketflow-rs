@@ -26,7 +26,7 @@ pocketflow-mcp = "0.1.0"
 
 ```rust
 use pocketflow_core::prelude::*;
-use pocketflow_mcp::prelude::*;
+use pocketflow_mcp::{prelude::*, client::McpClientNode};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum WorkflowState {
@@ -44,27 +44,25 @@ impl FlowState for WorkflowState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Create MCP client
-    let client = UltraFastMcpClient::new("http://localhost:8080").await?;
-    
-    // Create workflow with MCP integration
+    // Create workflow with MCP integration (HTTP transport)
+    let node = McpClientNode::builder("mcp_tool_caller")
+        .with_http("http://localhost:8080")
+        .tool("my_tool")
+        .map_input("param1", "param1")
+        .map_input("param2", "param2")
+        .output_to("tool_result")
+        .on_success(WorkflowState::Success)
+        .on_error(WorkflowState::Error)
+        .build()?;
+
     let flow = SimpleFlow::builder()
         .initial_state(WorkflowState::Start)
-        .add_node(WorkflowState::Start, McpClientNode::new(
-            "mcp_tool_caller".to_string(),
-            Arc::new(client),
-            "my_tool".to_string(),
-            WorkflowState::CallingTool,
-            WorkflowState::Success,
-            WorkflowState::Error,
-        ))
+        .node(WorkflowState::Start, node)
         .build()?;
 
     let mut context = Context::new();
-    context.set("tool_args".to_string(), serde_json::json!({
-        "param1": "value1",
-        "param2": 42
-    }))?;
+    context.set("param1", "value1")?;
+    context.set("param2", 42)?;
 
     let result = flow.execute(context).await?;
     println!("Final state: {:?}", result.final_state);
@@ -111,7 +109,9 @@ async fn main() -> Result<()> {
 
 ## 🏗️ Core Components
 
+ 
 ### McpClientNode
+
 Integrates MCP tool calls into PocketFlow workflows:
 
 ```rust
@@ -125,7 +125,9 @@ let client_node = McpClientNode::new(
 );
 ```
 
+ 
 ### McpServerNode
+
 Exposes workflow capabilities as MCP server:
 
 ```rust
@@ -136,7 +138,9 @@ let server_node = McpServerNode::new(
 );
 ```
 
+ 
 ### Context Extensions
+
 Seamlessly integrate MCP data with workflow context:
 
 ```rust
@@ -151,7 +155,9 @@ let result = context.call_mcp_tool(
 ).await?;
 ```
 
+ 
 ### Registry Management
+
 Manage multiple MCP connections:
 
 ```rust
@@ -173,7 +179,7 @@ let (clients, servers) = registry.list_all().await;
 The MCP server provides these built-in tools:
 
 - **get_context**: Retrieve workflow context data
-- **set_context**: Update workflow context 
+- **set_context**: Update workflow context
 - **get_flow_state**: Get current workflow state
 - **execute_workflow**: Trigger workflow execution
 

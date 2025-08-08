@@ -231,6 +231,10 @@ pub struct McpClientNode<S: FlowState> {
     tool_name: String,
     input_mapping: HashMap<String, String>,
     output_key: Option<String>,
+    max_retries: usize,
+    initial_backoff_ms: u64,
+    include_context: bool,
+    context_arg_name: String,
     on_success: Option<S>,
     on_error: Option<S>,
     _phantom: std::marker::PhantomData<S>,
@@ -279,10 +283,33 @@ impl<S: FlowState> Node for McpClientNode<S> {
             }
         }
 
-        // Call the tool
-        let result = client
-            .call_tool(&self.tool_name, Value::Object(tool_args))
-            .await;
+        // Optionally include the entire JSON snapshot of context
+        if self.include_context {
+            let ctx_json = context.to_json()?;
+            tool_args.insert(self.context_arg_name.clone(), ctx_json);
+        }
+
+        // Call the tool with retries
+        let mut attempt = 0usize;
+        let result = loop {
+            let call = client
+                .call_tool(&self.tool_name, Value::Object(tool_args.clone()))
+                .await;
+            match call {
+                Ok(v) => break Ok(v),
+                Err(e) => {
+                    attempt += 1;
+                    if attempt > self.max_retries {
+                        break Err(e);
+                    } else {
+                        let backoff = self
+                            .initial_backoff_ms
+                            .saturating_mul(1u64 << (attempt - 1));
+                        tokio::time::sleep(std::time::Duration::from_millis(backoff)).await;
+                    }
+                }
+            }
+        };
 
         match result {
             Ok(tool_result) => {
@@ -291,12 +318,12 @@ impl<S: FlowState> Node for McpClientNode<S> {
                     context.set(output_key, &tool_result)?;
                 }
 
-                // Transition to success state or stay in current state
-                let next_state = self.on_success.clone().unwrap_or_else(|| {
-                    // Default behavior: extract state from context or use a default
-                    // This is a simplified approach - in practice, you might want more sophisticated state handling
-                    todo!("Need to determine default success state")
-                });
+                // Transition to configured success state
+                let next_state = self.on_success.clone().ok_or_else(|| {
+                    pocketflow_core::error::FlowError::construction(
+                        "on_success state not configured for McpClientNode",
+                    )
+                })?;
 
                 Ok((context, next_state))
             }
@@ -304,11 +331,12 @@ impl<S: FlowState> Node for McpClientNode<S> {
                 // Store error in context
                 context.set("mcp_error", e.to_string())?;
 
-                // Transition to error state
-                let next_state = self
-                    .on_error
-                    .clone()
-                    .unwrap_or_else(|| todo!("Need to determine default error state"));
+                // Transition to configured error state
+                let next_state = self.on_error.clone().ok_or_else(|| {
+                    pocketflow_core::error::FlowError::construction(
+                        "on_error state not configured for McpClientNode",
+                    )
+                })?;
 
                 Ok((context, next_state))
             }
@@ -327,6 +355,10 @@ pub struct McpClientNodeBuilder<S: FlowState> {
     tool_name: Option<String>,
     input_mapping: HashMap<String, String>,
     output_key: Option<String>,
+    max_retries: usize,
+    initial_backoff_ms: u64,
+    include_context: bool,
+    context_arg_name: String,
     on_success: Option<S>,
     on_error: Option<S>,
     _phantom: std::marker::PhantomData<S>,
@@ -340,24 +372,31 @@ impl<S: FlowState> McpClientNodeBuilder<S> {
             tool_name: None,
             input_mapping: HashMap::new(),
             output_key: None,
+            max_retries: 0,
+            initial_backoff_ms: 200,
+            include_context: false,
+            context_arg_name: "context".to_string(),
             on_success: None,
             on_error: None,
             _phantom: std::marker::PhantomData,
         }
     }
 
+    /// Use stdio transport to connect to an MCP server spawned as a child process.
     /// Configure the node to use stdio transport.
     pub fn with_stdio(mut self) -> Self {
         self.transport_config = Some(McpTransportConfig::Stdio);
         self
     }
 
+    /// Use HTTP transport to connect to a remote MCP server at the given URL.
     /// Configure the node to use HTTP transport.
     pub fn with_http(mut self, url: impl Into<String>) -> Self {
         self.transport_config = Some(McpTransportConfig::Http { url: url.into() });
         self
     }
 
+    /// Provide a custom transport configuration string (reserved for advanced setups).
     /// Configure the node to use custom transport.
     pub fn with_custom(mut self, config: impl Into<String>) -> Self {
         self.transport_config = Some(McpTransportConfig::Custom {
@@ -366,12 +405,14 @@ impl<S: FlowState> McpClientNodeBuilder<S> {
         self
     }
 
+    /// Set the MCP tool to invoke when this node executes.
     /// Set the tool name to call.
     pub fn tool(mut self, name: impl Into<String>) -> Self {
         self.tool_name = Some(name.into());
         self
     }
 
+    /// Map a key from workflow Context to a tool argument name in the MCP call.
     /// Map a context key to a tool argument.
     pub fn map_input(
         mut self,
@@ -383,18 +424,49 @@ impl<S: FlowState> McpClientNodeBuilder<S> {
         self
     }
 
+    /// Store the MCP tool call result under this key in the workflow Context.
     /// Set the context key to store the tool result.
     pub fn output_to(mut self, key: impl Into<String>) -> Self {
         self.output_key = Some(key.into());
         self
     }
 
+    /// Max retry attempts if the MCP tool call fails (default 0).
+    /// Configure max retries on tool failures (default 0).
+    pub fn max_retries(mut self, n: usize) -> Self {
+        self.max_retries = n;
+        self
+    }
+
+    /// Initial retry backoff in milliseconds; backoff grows exponentially per attempt (default 200ms).
+    /// Configure initial backoff in milliseconds for retries (default 200ms).
+    pub fn initial_backoff_ms(mut self, ms: u64) -> Self {
+        self.initial_backoff_ms = ms;
+        self
+    }
+
+    /// When true, injects a JSON snapshot of the entire Context as an argument in the MCP call.
+    /// Include a JSON snapshot of Context as an argument to the tool (default false).
+    pub fn include_context(mut self, include: bool) -> Self {
+        self.include_context = include;
+        self
+    }
+
+    /// Set the argument name used to pass the Context JSON to the tool (default: "context").
+    /// Set the argument name to carry the context JSON (default "context").
+    pub fn context_arg_name(mut self, name: impl Into<String>) -> Self {
+        self.context_arg_name = name.into();
+        self
+    }
+
+    /// Set the state to transition to when the MCP call succeeds.
     /// Set the state to transition to on success.
     pub fn on_success(mut self, state: S) -> Self {
         self.on_success = Some(state);
         self
     }
 
+    /// Set the state to transition to when the MCP call fails.
     /// Set the state to transition to on error.
     pub fn on_error(mut self, state: S) -> Self {
         self.on_error = Some(state);
@@ -415,14 +487,29 @@ impl<S: FlowState> McpClientNodeBuilder<S> {
                 message: "Tool name is required".to_string(),
             })?;
 
+        let on_success = self
+            .on_success
+            .ok_or_else(|| PocketFlowMcpError::InvalidArguments {
+                message: "on_success state is required".to_string(),
+            })?;
+        let on_error = self
+            .on_error
+            .ok_or_else(|| PocketFlowMcpError::InvalidArguments {
+                message: "on_error state is required".to_string(),
+            })?;
+
         Ok(McpClientNode {
             name: self.name,
             transport_config,
             tool_name,
             input_mapping: self.input_mapping,
             output_key: self.output_key,
-            on_success: self.on_success,
-            on_error: self.on_error,
+            max_retries: self.max_retries,
+            initial_backoff_ms: self.initial_backoff_ms,
+            include_context: self.include_context,
+            context_arg_name: self.context_arg_name,
+            on_success: Some(on_success),
+            on_error: Some(on_error),
             _phantom: std::marker::PhantomData,
         })
     }
@@ -479,5 +566,56 @@ pub mod helpers {
         tool_name: impl Into<String>,
     ) -> McpClientNodeBuilder<S> {
         McpClientNode::builder(name).with_stdio().tool(tool_name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pocketflow_core::state::SimpleState;
+
+    use super::*;
+
+    #[test]
+    fn builder_requires_transport_and_tool_and_states() {
+        // Missing transport
+        let res = McpClientNode::<SimpleState>::builder("n")
+            .tool("t")
+            .on_success(SimpleState::Success)
+            .on_error(SimpleState::Error)
+            .build();
+        assert!(res.is_err());
+
+        // Missing tool
+        let res = McpClientNode::<SimpleState>::builder("n")
+            .with_http("http://localhost:1234")
+            .on_success(SimpleState::Success)
+            .on_error(SimpleState::Error)
+            .build();
+        assert!(res.is_err());
+
+        // Missing on_success
+        let res = McpClientNode::<SimpleState>::builder("n")
+            .with_http("http://localhost:1234")
+            .tool("t")
+            .on_error(SimpleState::Error)
+            .build();
+        assert!(res.is_err());
+
+        // Missing on_error
+        let res = McpClientNode::<SimpleState>::builder("n")
+            .with_http("http://localhost:1234")
+            .tool("t")
+            .on_success(SimpleState::Success)
+            .build();
+        assert!(res.is_err());
+
+        // All provided should succeed
+        let res = McpClientNode::<SimpleState>::builder("n")
+            .with_http("http://localhost:1234")
+            .tool("t")
+            .on_success(SimpleState::Success)
+            .on_error(SimpleState::Error)
+            .build();
+        assert!(res.is_ok());
     }
 }

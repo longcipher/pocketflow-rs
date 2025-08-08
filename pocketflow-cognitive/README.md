@@ -194,6 +194,82 @@ let current_focus = context.get_reasoning_focus()?;
 - `Adaptive`: Adaptive planning with feedback loops
 - `BackwardChaining`: Goal-oriented backward planning
 
+### Structured JSON Inputs (Reasoning & Planning)
+
+- Reasoning (preferred):
+    - Object with fields: `steps` (array of `{thought, inference?, confidence?}`), `conclusion` (string), `confidence` (number)
+    - Fallback: plain text with lines like `Step 1: ...` and `Conclusion: ...`
+- Planning (preferred):
+    - Object with fields: `id?`, `steps` (array of step objects), `estimated_duration_seconds?`, `required_resources?`, `risk_factors?`
+    - Step object: `id?`, `description`, `dependencies?` (array of strings or numbers), `estimated_duration_seconds?`, `required_tools?`, `success_criteria?`
+    - Fallback: plain text lines like `1. ...` or `Step N: ...`
+    - Validation: object responses are minimally validated with a JSON Schema that requires `steps`
+
+### Plan Execution Options
+
+- `PlanExecutionNode` builder options:
+    - `tool_name("execute_step")` set the tool to call
+    - `stop_on_error(true|false)` stop execution on first failure
+    - `max_retries(n)` retries per step for transient errors (default 2)
+    - `initial_backoff_ms(ms)` exponential backoff base delay (default 200ms)
+    - `enforce_success_criteria(true|false)` enforce success criteria checks; can be overridden per-step
+    - Sends `required_tools` and a JSON snapshot of Context in tool args
+
+#### Rich success criteria examples
+
+Each `PlanStep.success_criteria` is a `Vec<serde_json::Value>` supporting:
+
+- String: substring must appear in textual output
+- {"regex": "pattern"}: regex must match textual output
+- {"json_pointer": "/path", "equals": json}: parsed JSON at pointer must equal value
+- {"json_pointer": "/path", "exists": true}: pointer must exist
+- {"json_pointer": "/path", "contains": "substr"}: if pointer is a string, it must contain; if array of strings, at least one element must contain
+
+Per-step overrides are available: `enforce_success_criteria`, `max_retries`, `initial_backoff_ms`, and `stop_on_error`.
+
+Example:
+
+```rust
+use pocketflow_cognitive::prelude::*;
+use serde_json::json;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum S { Start, Done, Err }
+impl pocketflow_core::state::FlowState for S { fn is_terminal(&self) -> bool { matches!(self, S::Done | S::Err) } }
+
+let mcp = create_mcp_client(); // your MCP client
+let executor = PlanExecutionNode::builder()
+    .with_mcp_client(mcp)
+    .tool_name("execute_step")
+    .enforce_success_criteria(false) // default policy
+    .max_retries(0)
+    .on_success(S::Done)
+    .on_error(S::Err)
+    .build()?;
+
+let plan = ExecutionPlan {
+    id: "p1".into(),
+    goal: Goal { id: "g".into(), description: "demo".into(), success_criteria: vec![], constraints: vec![], priority: 5 },
+    steps: vec![ PlanStep {
+        id: "s1".into(), description: "fetch".into(), dependencies: vec![],
+        estimated_duration: std::time::Duration::from_secs(30), required_tools: vec!["fetch".into()],
+        success_criteria: vec![
+            json!({"regex": "id=\\d+"}),
+            json!({"json_pointer": "/data/message", "contains": "ok"}),
+            json!({"json_pointer": "/data/count", "equals": 3})
+        ],
+        // Per-step overrides
+        enforce_success_criteria: Some(true),
+        max_retries: Some(2),
+        initial_backoff_ms: Some(100),
+        stop_on_error: Some(true),
+    }],
+    estimated_duration: std::time::Duration::from_secs(30),
+    required_resources: vec![],
+    risk_factors: vec![],
+};
+```
+
 ## 🤝 Integration with Existing Code
 
 This crate is designed to extend existing PocketFlow workflows without breaking changes:
@@ -260,8 +336,8 @@ cargo run --example thinking_workflow --package pocketflow-cognitive
 
 This project is licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
 
 at your option.
 

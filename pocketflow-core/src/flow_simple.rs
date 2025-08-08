@@ -161,3 +161,64 @@ impl<S: FlowState> Default for SimpleFlowBuilder<S> {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{context::Context, node::helpers, state::SimpleState};
+
+    #[tokio::test]
+    async fn build_requires_initial_state_and_nodes() {
+        // No initial state
+        let flow = SimpleFlowBuilder::<SimpleState>::new().build();
+        assert!(flow.is_err());
+
+        // Initial state set but no nodes
+        let flow = SimpleFlowBuilder::new()
+            .initial_state(SimpleState::Start)
+            .build();
+        assert!(flow.is_err());
+    }
+
+    #[tokio::test]
+    async fn execute_missing_node_yields_error_result() {
+        // Build with a node for Processing, but initial state is Start (no node for Start)
+        let flow = SimpleFlowBuilder::new()
+            .name("missing_node_flow")
+            .initial_state(SimpleState::Start)
+            .node(
+                SimpleState::Processing,
+                helpers::passthrough("p", SimpleState::Success),
+            )
+            .build()
+            .unwrap();
+
+        let result = flow.execute(Context::new()).await;
+
+        // When a node is missing for the current state, execute returns an error
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        let msg = format!("{err}");
+        assert!(msg.contains("No node found for state"));
+    }
+
+    #[tokio::test]
+    async fn exceeds_max_steps_returns_error() {
+        // Create a node that loops forever on Processing
+        let looping = helpers::fn_node("loop", |ctx: Context| async move {
+            Ok((ctx, SimpleState::Processing))
+        });
+
+        let flow = SimpleFlowBuilder::new()
+            .initial_state(SimpleState::Processing)
+            .node(SimpleState::Processing, looping)
+            .build()
+            .unwrap();
+
+        let result = flow.execute(Context::new()).await;
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        let msg = format!("{err}");
+        assert!(msg.contains("maximum steps"));
+    }
+}

@@ -109,41 +109,215 @@ Format your response as a structured plan that can be executed step by step.
     }
 
     async fn parse_planning_response(&self, response: Value, goal: Goal) -> Result<ExecutionPlan> {
-        let response_text = response.as_str().ok_or_else(|| {
-            pocketflow_core::error::FlowError::context("Invalid planning response format")
-        })?;
-
-        // Simple parsing implementation - in practice, this would be more sophisticated
-        let mut steps = Vec::new();
-        let mut step_counter = 1;
-
-        for line in response_text.lines() {
-            let line = line.trim();
-            if line.starts_with(&format!("{step_counter}."))
-                || line.starts_with(&format!("Step {step_counter}:"))
-            {
-                let description = line.split(':').nth(1).unwrap_or(line).trim().to_string();
-
-                steps.push(PlanStep {
-                    id: format!("step_{step_counter}"),
-                    description,
-                    dependencies: vec![], // Could be enhanced to parse dependencies
-                    estimated_duration: Duration::from_secs(300), // Default 5 minutes
-                    required_tools: vec![], // Could be enhanced to parse required tools
-                    success_criteria: vec![], // Could be enhanced to parse success criteria
-                });
-                step_counter += 1;
-            }
+        // 1) Prefer structured JSON if available, validate minimally when object
+        if let Some(obj) = response.as_object() {
+            // Minimal plan schema: object with steps array
+            let schema = serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": ["string", "null"] },
+                    "steps": { "type": "array" },
+                    "estimated_duration_seconds": { "type": ["number", "integer", "null"] }
+                },
+                "required": ["steps"]
+            });
+            let compiled = jsonschema::Validator::new(&schema).map_err(|e| {
+                pocketflow_core::error::FlowError::context(format!(
+                    "Planning schema compile error: {e}"
+                ))
+            })?;
+            compiled.validate(&response).map_err(|e| {
+                pocketflow_core::error::FlowError::context(format!("Planning JSON invalid: {e}"))
+            })?;
+            return Ok(self.parse_plan_from_object(obj, goal));
         }
 
-        Ok(ExecutionPlan {
+        if let Some(arr) = response.as_array() {
+            return Ok(self.parse_plan_from_steps_array(arr, goal));
+        }
+
+        // 2) If it's a string, try to parse as JSON string first
+        if let Some(s) = response.as_str() {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(s) {
+                if let Some(obj) = val.as_object() {
+                    return Ok(self.parse_plan_from_object(obj, goal));
+                } else if let Some(arr) = val.as_array() {
+                    return Ok(self.parse_plan_from_steps_array(arr, goal));
+                }
+            }
+
+            // 3) Fallback: parse numbered lines like "1. ..." or "Step N: ..."
+            let mut steps = Vec::new();
+            let mut step_counter = 1;
+            for line in s.lines() {
+                let line = line.trim();
+                if line.starts_with(&format!("{step_counter}."))
+                    || line.starts_with(&format!("Step {step_counter}:"))
+                {
+                    let description = line.split(':').nth(1).unwrap_or(line).trim().to_string();
+                    steps.push(PlanStep {
+                        id: format!("step_{step_counter}"),
+                        description,
+                        dependencies: vec![],
+                        estimated_duration: Duration::from_secs(300),
+                        required_tools: vec![],
+                        success_criteria: vec![],
+                        enforce_success_criteria: None,
+                        max_retries: None,
+                        initial_backoff_ms: None,
+                        stop_on_error: None,
+                    });
+                    step_counter += 1;
+                }
+            }
+
+            return Ok(ExecutionPlan {
+                id: format!("plan_{}", uuid::Uuid::new_v4()),
+                goal,
+                steps: steps.clone(),
+                estimated_duration: Duration::from_secs(steps.len() as u64 * 300),
+                required_resources: vec![],
+                risk_factors: vec![],
+            });
+        }
+
+        Err(pocketflow_core::error::FlowError::context(
+            "Invalid planning response format",
+        ))
+    }
+
+    fn parse_plan_from_object(
+        &self,
+        obj: &serde_json::Map<String, Value>,
+        goal: Goal,
+    ) -> ExecutionPlan {
+        use std::time::Duration as StdDuration;
+        let plan_id = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("plan_{}", uuid::Uuid::new_v4()));
+
+        let steps_val = obj
+            .get("steps")
+            .cloned()
+            .unwrap_or_else(|| Value::Array(vec![]));
+        let steps = match steps_val {
+            Value::Array(arr) => self.collect_steps_from_array(&arr),
+            _ => Vec::new(),
+        };
+
+        // Plan-level estimated duration (seconds) or compute sum of steps
+        let plan_seconds = obj
+            .get("estimated_duration_seconds")
+            .and_then(|v| v.as_u64())
+            .unwrap_or_else(|| steps.iter().map(|s| s.estimated_duration.as_secs()).sum());
+
+        ExecutionPlan {
+            id: plan_id,
+            goal,
+            steps,
+            estimated_duration: StdDuration::from_secs(plan_seconds),
+            required_resources: obj
+                .get("required_resources")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            risk_factors: obj
+                .get("risk_factors")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
+
+    fn parse_plan_from_steps_array(&self, arr: &[Value], goal: Goal) -> ExecutionPlan {
+        let steps = self.collect_steps_from_array(arr);
+        let total = steps.iter().map(|s| s.estimated_duration.as_secs()).sum();
+        ExecutionPlan {
             id: format!("plan_{}", uuid::Uuid::new_v4()),
             goal,
-            steps: steps.clone(),
-            estimated_duration: Duration::from_secs(steps.len() as u64 * 300),
-            required_resources: vec![], // Could be enhanced to extract resources
-            risk_factors: vec![],       // Could be enhanced to extract risks
-        })
+            steps,
+            estimated_duration: Duration::from_secs(total),
+            required_resources: vec![],
+            risk_factors: vec![],
+        }
+    }
+
+    fn collect_steps_from_array(&self, arr: &[Value]) -> Vec<PlanStep> {
+        use std::time::Duration as StdDuration;
+        arr.iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let description = s
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let id = s
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("step_{}", i + 1));
+                let deps: Vec<String> = s
+                    .get("dependencies")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| match x {
+                                Value::String(st) => Some(st.clone()),
+                                Value::Number(n) => Some(format!("step_{n}")),
+                                _ => None,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let duration_secs = s
+                    .get("estimated_duration_seconds")
+                    .and_then(|v| v.as_u64())
+                    .or_else(|| s.get("duration_seconds").and_then(|v| v.as_u64()))
+                    .unwrap_or(300);
+                let required_tools = s
+                    .get("required_tools")
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let success_criteria = s
+                    .get("success_criteria")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.to_vec())
+                    .unwrap_or_else(Vec::new);
+                PlanStep {
+                    id,
+                    description,
+                    dependencies: deps,
+                    estimated_duration: StdDuration::from_secs(duration_secs),
+                    required_tools,
+                    success_criteria,
+                    enforce_success_criteria: s
+                        .get("enforce_success_criteria")
+                        .and_then(|v| v.as_bool()),
+                    max_retries: s
+                        .get("max_retries")
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n as usize),
+                    initial_backoff_ms: s.get("initial_backoff_ms").and_then(|v| v.as_u64()),
+                    stop_on_error: s.get("stop_on_error").and_then(|v| v.as_bool()),
+                }
+            })
+            .collect()
     }
 
     async fn evaluate_plan_progress(

@@ -31,6 +31,7 @@ reqwest = { workspace = true, optional = true }
 # Utilities
 regex = { workspace = true }
 tracing = { workspace = true }
+urlencoding = "2"
 
 # Development dependencies
 [dev-dependencies]

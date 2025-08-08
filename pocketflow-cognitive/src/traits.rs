@@ -157,7 +157,23 @@ pub struct PlanStep {
     pub dependencies: Vec<String>,
     pub estimated_duration: std::time::Duration,
     pub required_tools: Vec<String>,
-    pub success_criteria: Vec<String>,
+    /// Rich success criteria.
+    /// - String: substring must appear in textual output
+    /// - Object {"regex": "pattern"}: regex must match textual output
+    /// - Object {"json_pointer": "/path", "equals": json}: JSON output at pointer equals value
+    /// - Object {"json_pointer": "/path", "exists": true}: pointer exists
+    /// - Object {"json_pointer": "/path", "contains": "substr"}: when pointer resolves to a string, it must contain the substring;
+    ///   when it resolves to an array of strings, at least one element must contain the substring
+    pub success_criteria: Vec<serde_json::Value>,
+    /// Optional per-step overrides for executor behavior
+    #[serde(default)]
+    pub enforce_success_criteria: Option<bool>,
+    #[serde(default)]
+    pub max_retries: Option<usize>,
+    #[serde(default)]
+    pub initial_backoff_ms: Option<u64>,
+    #[serde(default)]
+    pub stop_on_error: Option<bool>,
 }
 
 /// Progress evaluation for an execution plan

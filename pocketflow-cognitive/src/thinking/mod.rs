@@ -150,6 +150,69 @@ Be explicit about your reasoning process and show your work.
     }
 
     async fn parse_reasoning_response(&self, response: Value) -> Result<ReasoningChain> {
+        // Prefer structured JSON if available
+        if let Some(obj) = response.as_object() {
+            // Validate minimal schema
+            let schema = serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "steps": { "type": "array" },
+                    "conclusion": { "type": "string" },
+                    "confidence": { "type": "number" }
+                },
+                "required": ["steps", "conclusion"]
+            });
+            let compiled = jsonschema::Validator::new(&schema).map_err(|e| {
+                pocketflow_core::error::FlowError::context(format!(
+                    "Reasoning schema compile error: {e}"
+                ))
+            })?;
+            compiled.validate(&response).map_err(|e| {
+                pocketflow_core::error::FlowError::context(format!("Reasoning JSON invalid: {e}"))
+            })?;
+            // Expected shape: { steps: [{thought, inference, confidence}], conclusion, confidence }
+            let mut steps_vec: Vec<ReasoningStep> = Vec::new();
+            if let Some(steps) = obj.get("steps").and_then(|v| v.as_array()) {
+                for (i, s) in steps.iter().enumerate() {
+                    let thought = s
+                        .get("thought")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let inference = s
+                        .get("inference")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(&thought)
+                        .to_string();
+                    let confidence = s.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.8);
+                    steps_vec.push(ReasoningStep {
+                        step_number: i + 1,
+                        thought,
+                        evidence: vec![],
+                        inference,
+                        confidence,
+                    });
+                }
+            }
+            let conclusion = obj
+                .get("conclusion")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            let confidence = obj
+                .get("confidence")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.8);
+
+            return Ok(ReasoningChain {
+                steps: steps_vec,
+                conclusion,
+                confidence,
+                alternatives_considered: vec![],
+            });
+        }
+
+        // Fallback: parse plain text format
         let response_text = response.as_str().ok_or_else(|| {
             pocketflow_core::error::FlowError::context("Invalid reasoning response format")
         })?;
@@ -170,9 +233,9 @@ Be explicit about your reasoning process and show your work.
                 steps.push(ReasoningStep {
                     step_number,
                     thought: thought.clone(),
-                    evidence: vec![], // Could be enhanced to extract evidence
+                    evidence: vec![],
                     inference: thought,
-                    confidence: 0.8, // Could be enhanced with confidence extraction
+                    confidence: 0.8,
                 });
                 step_number += 1;
             } else if line.starts_with("Conclusion:") {
@@ -187,8 +250,8 @@ Be explicit about your reasoning process and show your work.
         Ok(ReasoningChain {
             steps,
             conclusion,
-            confidence: 0.8, // Could be enhanced with overall confidence calculation
-            alternatives_considered: vec![], // Could be enhanced to extract alternatives
+            confidence: 0.8,
+            alternatives_considered: vec![],
         })
     }
 }

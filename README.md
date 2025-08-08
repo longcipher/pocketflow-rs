@@ -56,6 +56,7 @@ Comprehensive tool system for workflow automation:
 - Built-in utilities for common operations
 - Parameter validation and retry mechanisms
 - Integration across the entire ecosystem
+- New: Web search (simulate or HTTP GET) and Python execution tools (stdin, JSON stdout parsing)
 
 ## 🚀 Quick Start
 
@@ -205,6 +206,40 @@ async fn main() -> Result<()> {
 }
 ```
 
+### Cognitive Agent and Plan Execution (think → plan → execute)
+
+The cognitive crate includes ready-made nodes to chain reasoning, planning, and execution:
+
+- CognitiveAgentNode: performs thinking then planning and stores results in context.
+- IterativeCognitiveAgentNode: think → plan → reflect loop with optional simulated progress.
+- PlanExecutionNode: executes plan steps via an MCP tool with robust success criteria.
+
+Highlights:
+
+- Success criteria enforcement per step: substring, regex, and JSON Pointer equals/exists/contains.
+- Per-step overrides: enforce_success_criteria, max_retries, initial_backoff_ms, stop_on_error.
+- Retries with exponential backoff and optional early stop-on-error.
+
+Examples to try:
+
+```bash
+cargo run --example iterative_agent_demo --package pocketflow-cognitive
+cargo run --example think_plan_execute --package pocketflow-cognitive
+```
+
+### Web Search + Python Tools Example
+
+`pocketflow-tools` ships with two practical tools:
+
+- WebSearchTool: perform simulated or HTTP GET-based search/fetch (JSON output)
+- PythonExecutionTool: run Python code/files with timeout, stdin (string/JSON), and auto-parse stdout JSON into stdout_json
+
+Run the end-to-end example:
+
+```bash
+cargo run --example search_and_python_flow --package pocketflow-tools
+```
+
 ## 🏗️ Architecture
 
 ```text
@@ -263,6 +298,9 @@ cargo run --example basic --package pocketflow-core
 cargo run --example simple_agent_demo --package pocketflow-agent
 cargo run --example thinking_workflow --package pocketflow-cognitive
 cargo run --example simple_mcp_demo --package pocketflow-mcp
+cargo run --example iterative_agent_demo --package pocketflow-cognitive
+cargo run --example think_plan_execute --package pocketflow-cognitive
+cargo run --example search_and_python_flow --package pocketflow-tools
 ```
 
 ## 📋 Features by Crate
@@ -296,7 +334,9 @@ cargo run --example simple_mcp_demo --package pocketflow-mcp
 - ✅ Multi-layered memory systems
 - ✅ Reflection and explanation nodes
 - ✅ MCP integration for AI services
-- ⏳ Adaptive planning (in development)
+- ✅ Adaptive planning (node included; configurable)
+- ✅ Plan execution with success criteria enforcement (substring/regex/JSON Pointer)
+- ✅ Per-step overrides for enforcement and retry/backoff/stop-on-error
 - ⏳ Learning capabilities (planned)
 
 ### AI Agent Features
@@ -318,6 +358,8 @@ cargo run --example simple_mcp_demo --package pocketflow-mcp
 - ✅ Built-in utility tools
 - ✅ Retry and timeout mechanisms
 - ✅ Custom tool development
+- ✅ Web search tool (simulate/HTTP GET, header/limit support)
+- ✅ Python execution tool (stdin string/JSON, stdout JSON auto-parse)
 - ⏳ Tool composition (planned)
 - ⏳ Advanced caching (planned)
 

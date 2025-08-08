@@ -19,6 +19,7 @@ async-trait = { workspace = true }
 tokio = { workspace = true }
 
 # Serialization
+jsonschema = { workspace = true, optional = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
@@ -27,6 +28,7 @@ thiserror = { workspace = true }
 
 # Utilities
 chrono = { workspace = true }
+regex = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 

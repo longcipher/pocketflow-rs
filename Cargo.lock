@@ -1616,8 +1616,10 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "jsonschema",
  "pocketflow-core",
  "pocketflow-mcp",
+ "regex",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -1679,6 +1681,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "urlencoding",
  "uuid",
 ]
 

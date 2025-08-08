@@ -162,7 +162,11 @@ Format your response as a structured adaptive plan with built-in flexibility poi
                     dependencies: vec![], // Could parse dependencies
                     estimated_duration: Duration::from_secs(400), // Slightly longer for adaptation
                     required_tools: vec!["adaptation_monitor".to_string()],
-                    success_criteria: vec!["checkpoint_passed".to_string()],
+                    success_criteria: vec![json!("checkpoint_passed")],
+                    enforce_success_criteria: None,
+                    max_retries: None,
+                    initial_backoff_ms: None,
+                    stop_on_error: None,
                 });
                 step_counter += 1;
             }

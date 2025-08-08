@@ -56,6 +56,7 @@
 - 常用操作的内置实用程序
 - 参数验证和重试机制
 - 整个生态系统的集成
+- 新增：Web 搜索（模拟或 HTTP GET）与 Python 执行工具（支持 stdin、自动解析 JSON 输出）
 
 ## 🚀 快速开始
 
@@ -205,6 +206,40 @@ async fn main() -> Result<()> {
 }
 ```
 
+### 认知代理与计划执行（思考 → 规划 → 执行）
+
+认知 crate 提供开箱即用的节点，用于串联推理、规划与执行：
+
+- CognitiveAgentNode：先思考后规划，并将结果写入上下文
+- IterativeCognitiveAgentNode：思考 → 规划 → 反思的迭代循环，可选模拟推进进度
+- PlanExecutionNode：通过 MCP 工具执行计划步骤，并进行稳健的成功判定
+
+要点：
+
+- 步骤级成功判定：子串、正则、JSON 指针 equals/exists/contains
+- 每步可覆盖默认策略：enforce_success_criteria、max_retries、initial_backoff_ms、stop_on_error
+- 带指数退避的重试、可在错误时提前停止
+
+示例运行：
+
+```bash
+cargo run --example iterative_agent_demo --package pocketflow-cognitive
+cargo run --example think_plan_execute --package pocketflow-cognitive
+```
+
+### Web 搜索 + Python 工具示例
+
+`pocketflow-tools` 自带两个实用工具：
+
+- WebSearchTool：执行模拟或基于 HTTP GET 的搜索/抓取（JSON 输出）
+- PythonExecutionTool：运行 Python 代码/脚本，支持超时、stdin（字符串/JSON），自动将 stdout JSON 解析为 stdout_json
+
+运行端到端示例：
+
+```bash
+cargo run --example search_and_python_flow --package pocketflow-tools
+```
+
 ## 🏗️ 架构图
 
 ```text
@@ -263,6 +298,9 @@ cargo run --example basic --package pocketflow-core
 cargo run --example simple_agent_demo --package pocketflow-agent
 cargo run --example thinking_workflow --package pocketflow-cognitive
 cargo run --example simple_mcp_demo --package pocketflow-mcp
+cargo run --example iterative_agent_demo --package pocketflow-cognitive
+cargo run --example think_plan_execute --package pocketflow-cognitive
+cargo run --example search_and_python_flow --package pocketflow-tools
 ```
 
 ## 📋 各 Crate 功能
@@ -296,7 +334,9 @@ cargo run --example simple_mcp_demo --package pocketflow-mcp
 - ✅ 多层内存系统
 - ✅ 反思和解释节点
 - ✅ AI 服务的 MCP 集成
-- ⏳ 自适应规划（开发中）
+- ✅ 自适应规划（已提供节点，可配置）
+- ✅ 计划执行与成功判定（子串/正则/JSON 指针）
+- ✅ 步骤级覆盖：判定开关、重试/退避/出错停止
 - ⏳ 学习能力（计划中）
 
 ### AI 代理功能
@@ -318,6 +358,8 @@ cargo run --example simple_mcp_demo --package pocketflow-mcp
 - ✅ 内置实用工具
 - ✅ 重试和超时机制
 - ✅ 自定义工具开发
+- ✅ Web 搜索工具（模拟/HTTP GET，支持 header/limit）
+- ✅ Python 执行工具（stdin 字符串/JSON，stdout JSON 自动解析）
 - ⏳ 工具组合（计划中）
 - ⏳ 高级缓存（计划中）
 

@@ -84,8 +84,11 @@
 //! }
 //! ```
 
+pub mod agent;
+pub mod agent_iterative;
 pub mod context;
 pub mod error;
+pub mod execution;
 pub mod memory;
 pub mod planning;
 pub mod thinking;
@@ -99,8 +102,11 @@ pub mod prelude {
     pub use pocketflow_mcp::prelude::*;
 
     pub use crate::{
+        agent::CognitiveAgentNode,
+        agent_iterative::IterativeCognitiveAgentNode,
         context::CognitiveContextExt,
         error::{CognitiveError, Result},
+        execution::PlanExecutionNode,
         memory::{CognitiveMemory, EpisodicMemory, SemanticMemory, WorkingMemory},
         planning::{
             AdaptivePlanningNode, GoalOrientedPlanningNode, HierarchicalPlanningNode,

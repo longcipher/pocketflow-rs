@@ -46,7 +46,11 @@ pub mod builders {
             dependencies: vec![],
             estimated_duration: Duration::from_secs(300), // 5 minutes default
             required_tools: vec![],
-            success_criteria: vec!["Step completed".to_string()],
+            success_criteria: vec![serde_json::json!("Step completed")],
+            enforce_success_criteria: None,
+            max_retries: None,
+            initial_backoff_ms: None,
+            stop_on_error: None,
         }
     }
 
@@ -57,7 +61,7 @@ pub mod builders {
         dependencies: Vec<String>,
         duration: Duration,
         tools: Vec<String>,
-        success_criteria: Vec<String>,
+        success_criteria: Vec<serde_json::Value>,
     ) -> PlanStep {
         PlanStep {
             id: id.into(),
@@ -66,6 +70,10 @@ pub mod builders {
             estimated_duration: duration,
             required_tools: tools,
             success_criteria,
+            enforce_success_criteria: None,
+            max_retries: None,
+            initial_backoff_ms: None,
+            stop_on_error: None,
         }
     }
 

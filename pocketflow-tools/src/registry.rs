@@ -546,3 +546,132 @@ impl Tool for McpToolWrapper {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use serde_json::json;
+    use tokio::sync::RwLock;
+
+    use super::*;
+    use crate::core::{ToolCategory, ToolContext, ToolParameters};
+
+    struct ParamTool;
+
+    #[async_trait]
+    impl Tool for ParamTool {
+        fn name(&self) -> &str {
+            "param_tool"
+        }
+        fn description(&self) -> &str {
+            "Validates required param"
+        }
+        fn category(&self) -> ToolCategory {
+            ToolCategory::Custom
+        }
+        fn parameter_schema(&self) -> serde_json::Value {
+            ToolParameters::new_schema()
+                .add_required("q", "string", "query")
+                .into()
+        }
+        async fn execute(
+            &self,
+            _parameters: ToolParameters,
+            _context: ToolContext,
+        ) -> Result<ToolResult> {
+            Ok(ToolResult::success("ok"))
+        }
+    }
+
+    #[tokio::test]
+    async fn register_and_list_tools_and_categories() {
+        let mut reg = ToolRegistry::new();
+        reg.register_category("general", "default").await.unwrap();
+        reg.register_category("ai", "ai tools").await.unwrap();
+
+        reg.register_tool(Box::new(MockTool::new("t1")))
+            .await
+            .unwrap();
+        reg.register_tool(Box::new(MockTool::new("t2")))
+            .await
+            .unwrap();
+
+        let tools = reg.list_tools().await;
+        assert!(tools.contains(&"t1".to_string()) && tools.contains(&"t2".to_string()));
+
+        let cats = reg.list_categories().await;
+        assert!(cats.contains(&"general".to_string()) && cats.contains(&"ai".to_string()));
+    }
+
+    #[tokio::test]
+    async fn validate_fails_on_missing_required_param() {
+        let mut reg = ToolRegistry::new();
+        reg.register_tool(Box::new(ParamTool)).await.unwrap();
+
+        let bad_params = json!({});
+        let ok = reg.validate_tool_call("param_tool", &bad_params).await;
+        assert!(ok.is_err());
+    }
+
+    #[tokio::test]
+    async fn execute_with_cache_and_retry() {
+        // A tool that fails first then succeeds, and is cacheable
+        struct FlakyTool {
+            calls: Arc<RwLock<usize>>,
+        }
+        #[async_trait]
+        impl Tool for FlakyTool {
+            fn name(&self) -> &str {
+                "flaky"
+            }
+            fn description(&self) -> &str {
+                "flaky"
+            }
+            fn category(&self) -> ToolCategory {
+                ToolCategory::Custom
+            }
+            fn parameter_schema(&self) -> serde_json::Value {
+                json!({"type":"object"})
+            }
+            fn capabilities(&self) -> Vec<ToolCapability> {
+                vec![ToolCapability::Cacheable]
+            }
+            async fn execute(
+                &self,
+                _parameters: ToolParameters,
+                _context: ToolContext,
+            ) -> Result<ToolResult> {
+                let mut n = self.calls.write().await;
+                *n += 1;
+                if *n == 1 {
+                    return Err(ToolError::execution("fail".to_string()));
+                }
+                Ok(ToolResult::success("ok"))
+            }
+        }
+
+        let mut reg = ToolRegistry::new().with_cache_enabled(true);
+        let calls = Arc::new(RwLock::new(0usize));
+        reg.register_tool(Box::new(FlakyTool {
+            calls: calls.clone(),
+        }))
+        .await
+        .unwrap();
+
+        let ctx = ToolContext::new();
+        let retry = RetryConfig::default().with_max_attempts(2);
+        let res = reg
+            .execute_tool_with_retry("flaky", &json!({}), &ctx, retry)
+            .await
+            .unwrap();
+        assert!(res.is_success());
+
+        // Second call should hit cache and not increment calls
+        let res2 = reg.execute_tool("flaky", &json!({}), &ctx).await.unwrap();
+        assert!(res2.cached);
+
+        let count = *calls.read().await;
+        assert_eq!(count, 2); // one failure + one success
+    }
+}
